@@ -14,12 +14,9 @@ import {
   Users, 
   Filter, 
   Download,
-  Send,
-  Eye,
   BookOpen,
   Target,
   Brain,
-  MessageSquare,
   Star,
   CheckCircle
 } from "lucide-react"
@@ -93,9 +90,6 @@ export default function InstructorStudents() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRisk, setFilterRisk] = useState('all')
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-  const [showStudentModal, setShowStudentModal] = useState(false)
-  const [showInterventionModal, setShowInterventionModal] = useState(false)
 
   // Fetch enrolled students data
   useEffect(() => {
@@ -158,15 +152,6 @@ export default function InstructorStudents() {
   }
 
 
-  const handleViewStudent = (student: any) => {
-    setSelectedStudent(student)
-    setShowStudentModal(true)
-  }
-
-  const handleSendIntervention = (student: any) => {
-    setSelectedStudent(student)
-    setShowInterventionModal(true)
-  }
 
   return (
     <div>
@@ -343,24 +328,6 @@ export default function InstructorStudents() {
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" variant="outline" onClick={() => handleViewStudent(student)} className="flex-1">
-                    <Eye className="h-4 w-4 mr-1" />
-                    View Details
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => handleSendIntervention(student)}
-                    className={student.riskLevel === 'High' ? 'border-red-300 text-red-700 hover:bg-red-50' : ''}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    <MessageSquare className="h-4 w-4" />
-                  </Button>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -394,182 +361,11 @@ export default function InstructorStudents() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => handleSendIntervention(student)}>
-                      <Send className="h-4 w-4 mr-2" />
-                      Send Intervention
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleViewStudent(student)}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Profile
-                    </Button>
-                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* Student Detail Modal */}
-      {showStudentModal && selectedStudent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-4xl max-h-[90vh] overflow-auto">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center">
-                  <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center text-white text-lg font-medium mr-4">
-                    {selectedStudent.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">{selectedStudent.name}</CardTitle>
-                    <CardDescription>{selectedStudent.email}</CardDescription>
-                    <Badge variant="outline" className={`mt-2 ${getRiskColor(selectedStudent.riskLevel)}`}>
-                      {getRiskIcon(selectedStudent.riskLevel)}
-                      <span className="ml-1">{selectedStudent.riskLevel} Risk</span>
-                    </Badge>
-                  </div>
-                </div>
-                <Button variant="ghost" onClick={() => setShowStudentModal(false)}>×</Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Performance Overview */}
-                <div className="space-y-4">
-                  <h3 className="font-medium text-gray-900">Performance Overview</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Progress</p>
-                      <p className="text-2xl font-bold">{selectedStudent.progress}%</p>
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Average Score</p>
-                      <p className="text-2xl font-bold">{selectedStudent.avgScore}%</p>
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Study Sessions</p>
-                      <p className="text-2xl font-bold">{selectedStudent.studySessions}</p>
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Current Streak</p>
-                      <p className="text-2xl font-bold">{selectedStudent.streak} days</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Learning Analysis */}
-                <div className="space-y-4">
-                  <h3 className="font-medium text-gray-900">Learning Analysis</h3>
-                  
-                  <div>
-                    <h4 className="font-medium text-green-700 mb-2">Strong Areas</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedStudent.strongAreas.map((area, idx) => (
-                        <Badge key={idx} variant="secondary" className="bg-green-100 text-green-700">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          {area}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {selectedStudent.weakAreas.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-amber-700 mb-2">Areas Needing Support</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedStudent.weakAreas.map((area, idx) => (
-                          <Badge key={idx} variant="outline" className="border-amber-300 text-amber-700">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            {area}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <h4 className="font-medium text-blue-900 dark:text-white mb-2">AI Recommendation</h4>
-                    <p className="text-sm text-blue-700 dark:text-white">
-                      {selectedStudent.riskLevel === 'High' 
-                        ? "Schedule one-on-one consultation. Recommend Feynman Technique for weak areas and provide additional Constitutional Law resources."
-                        : selectedStudent.riskLevel === 'Medium'
-                        ? "Monitor progress closely. Suggest Active Recall sessions for challenging topics and encourage peer study groups."
-                        : "Student is performing well. Consider advanced materials and leadership opportunities in study groups."
-                      }
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowStudentModal(false)}>Close</Button>
-                <Button onClick={() => { setShowStudentModal(false); handleSendIntervention(selectedStudent); }}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Intervention
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Intervention Modal */}
-      {showInterventionModal && selectedStudent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-2xl">
-            <CardHeader>
-              <CardTitle>Send Intervention to {selectedStudent.name}</CardTitle>
-              <CardDescription>Provide personalized support and guidance</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Intervention Type</label>
-                  <select className="w-full p-2 border rounded-md">
-                    <option>Academic Support</option>
-                    <option>Motivational Message</option>
-                    <option>Schedule Meeting</option>
-                    <option>Provide Resources</option>
-                    <option>Study Technique Recommendation</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Subject</label>
-                  <Input placeholder="Enter subject line" defaultValue={`Support for ${selectedStudent.weakAreas[0] || 'Criminal Jurisprudence'}`} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Message</label>
-                  <textarea 
-                    className="w-full p-3 border rounded-md h-32"
-                    placeholder="Dear student..."
-                    defaultValue={`Hi ${selectedStudent.name.split(' ')[0]},
-
-I've noticed you're experiencing some challenges with ${selectedStudent.weakAreas.join(' and ')}. I'd like to schedule a brief meeting to discuss strategies that can help improve your understanding of these topics.
-
-Based on your learning patterns, I recommend trying the Feynman Technique for these concepts. I've also prepared some additional resources that might be helpful.
-
-Please let me know your availability for a 30-minute consultation this week.
-
-Best regards,
-Prof. Juan Dela Cruz`}
-                  ></textarea>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="aiEnhance" defaultChecked />
-                  <label htmlFor="aiEnhance" className="text-sm">Enhance message with AI recommendations</label>
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setShowInterventionModal(false)}>Cancel</Button>
-                <Button onClick={() => setShowInterventionModal(false)} className="bg-emerald-600 hover:bg-emerald-700">
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Intervention
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       )}
     </div>
   )
