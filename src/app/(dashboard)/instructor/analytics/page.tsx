@@ -1,28 +1,43 @@
-"use client"
+'use client'
 
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/contexts/auth-context'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { INSTRUCTOR_COURSE } from "@/lib/constants"
+import { Skeleton } from "@/components/ui/skeleton"
 import { 
-  TrendingUp, 
+  BarChart3, 
   Users, 
+  TrendingUp, 
   BookOpen, 
   Clock, 
-  Download, 
-  Filter, 
-  Calendar,
-  Brain,
   Target,
   AlertTriangle,
   CheckCircle,
-  BarChart3,
-  Sparkles,
+  Activity,
+  Brain,
+  Timer,
+  MessageSquare,
+  RefreshCw,
+  Download,
+  Filter,
   Eye,
-  MessageSquare
+  Lightbulb,
+  AlertCircle,
+  TrendingDown,
+  Calendar
 } from "lucide-react"
+import { useAuth } from '@/contexts/auth-context'
+import { 
+  EngagementTrendsChart,
+  StudyTechniquesChart,
+  ModulePerformanceChart,
+  TimeBasedTechniqueChart,
+  StudyHeatmapChart,
+  TechniqueEffectivenessChart,
+  PerformanceDistributionChart
+} from '@/components/analytics/interactive-charts'
+import { ExportDialog } from '@/components/analytics/export-dialog'
 
 interface AnalyticsData {
   keyMetrics: {
@@ -32,18 +47,12 @@ interface AnalyticsData {
     interventionsSent: number
   }
   studyTechniques: Array<{
-    technique?: string
-    name?: string
+    technique: string
     type: string
-    usage?: string
-    usagePercentage?: number
-    adoptionRate?: number
-    effectiveness?: string
-    effectivenessPercentage?: number
     totalSessions: number
-    averagePerformance?: number
-    averageScore?: number
-    uniqueUsers?: number
+    adoptionRate: number
+    effectivenessPercentage: number
+    uniqueUsers: number
   }>
   modulePerformance: Array<{
     id: string
@@ -51,7 +60,7 @@ interface AnalyticsData {
     studentsCompleted: number
     totalStudents: number
     averageScore: number
-    status: string
+    status: 'excellent' | 'good' | 'needs_improvement' | 'critical'
   }>
   studentEngagement: {
     peakHours: Array<{
@@ -77,841 +86,1473 @@ interface AnalyticsData {
   activeStudents: number
 }
 
+interface DetailedEngagementData {
+  studentsList: Array<{
+    id: string
+    name: string
+    email: string
+    lastLogin: string
+    engagementLevel: 'high' | 'medium' | 'low'
+    totalSessions: number
+    recentSessions: number
+    completedSessions: number
+    completionRate: number
+    averagePerformance: number
+    moduleCompletionRate: number
+    preferredTechnique: string
+    lastActivity: string
+  }>
+  engagementTrends: Array<{
+    date: string
+    sessions: number
+    activeStudents: number
+    completedSessions: number
+  }>
+  techniquePreferences: Array<{
+    technique: string
+    sessions: number
+    users: number
+    adoptionRate: number
+    completionRate: number
+  }>
+}
+
+interface StudyTechniquesDetailedData {
+  activeRecallAnalytics: any
+  pomodoroAnalytics: any
+  feynmanAnalytics: any
+  retrievalPracticeAnalytics: any
+  techniqueComparison: Array<{
+    technique: string
+    sessions: number
+    users: number
+    adoptionRate: number
+    sessionsPerUser: number
+    color: string
+  }>
+  timeBasedAnalysis: Array<{
+    date: string
+    activeRecall: number
+    pomodoro: number
+    feynman: number
+    retrievalPractice: number
+    total: number
+  }>
+}
+
 interface AIInsightsData {
-  insights: Array<{
-    id: string
-    title: string
-    description: string
-    type: 'success' | 'warning' | 'info' | 'critical'
-    action: string
-    confidence: number
-    priority: number
-  }>
-  recommendations: Array<{
+  teachingRecommendations: Array<{
     id: string
     type: string
     title: string
     description: string
-    actionSteps: string[]
+    actionableAdvice: string
     priority: number
+    frequency: number
+    affectedStudentsCount: number
+    affectedStudents: string[]
+    confidence: number
+    impact: 'high' | 'medium' | 'low'
   }>
-  aiStatus: string
-}
-
-// Component for individual insight cards with overflow handling
-interface InsightCardProps {
-  insight: {
-    id: string
+  studentInterventions: Array<{
+    studentId: string
+    studentName: string
+    interventionLevel: 'urgent' | 'high' | 'medium'
+    reasons: string[]
+    recommendedActions: string[]
+    lastAnalyzed: string
+    sessionsAnalyzed: number
+    improvementTrend: number
+  }>
+  performanceAlerts: Array<{
+    type: 'critical' | 'warning' | 'info'
     title: string
     description: string
-    type: 'success' | 'warning' | 'info' | 'critical'
-    action: string
-    confidence: number
-    priority: number
-  }
-}
-
-function InsightCard({ insight }: InsightCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const shouldTruncate = insight.description.length > 120
-
-  return (
-    <div 
-      className={`p-4 rounded-lg border transition-all duration-200 h-full flex flex-col min-h-[200px] ${
-        insight.type === 'success' ? 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700' :
-        insight.type === 'warning' ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700' :
-        insight.type === 'critical' ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700' :
-        'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700'
-      }`}
-    >
-      <div className="flex items-start flex-1">
-        <div className={`w-2 h-2 rounded-full mt-2 mr-3 flex-shrink-0 ${
-          insight.type === 'success' ? 'bg-green-500 dark:bg-green-400' :
-          insight.type === 'warning' ? 'bg-amber-500 dark:bg-amber-400' :
-          insight.type === 'critical' ? 'bg-red-500 dark:bg-red-400' :
-          'bg-blue-500 dark:bg-blue-400'
-        }`}></div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <h4 className={`font-semibold text-sm leading-tight break-words hyphens-auto flex-1 ${
-              insight.type === 'success' ? 'text-green-800 dark:text-green-100' :
-              insight.type === 'warning' ? 'text-amber-800 dark:text-amber-100' :
-              insight.type === 'critical' ? 'text-red-800 dark:text-red-100' :
-              'text-blue-800 dark:text-blue-100'
-            }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-              {insight.title}
-            </h4>
-            <Badge variant="secondary" className="text-xs flex-shrink-0 ml-2 dark:bg-gray-700 dark:text-gray-200">
-              {Math.round(insight.confidence * 100)}%
-            </Badge>
-          </div>
-          <div className={`text-sm flex-1 ${
-            insight.type === 'success' ? 'text-green-700 dark:text-green-200' :
-            insight.type === 'warning' ? 'text-amber-700 dark:text-amber-200' :
-            insight.type === 'critical' ? 'text-red-700 dark:text-red-200' :
-            'text-blue-700 dark:text-blue-200'
-          }`}>
-            <p className="break-words hyphens-auto leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-              {shouldTruncate && !isExpanded 
-                ? `${insight.description.substring(0, 120)}...` 
-                : insight.description
-              }
-              {shouldTruncate && (
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className={`ml-2 text-xs underline hover:no-underline whitespace-nowrap ${
-                    insight.type === 'success' ? 'text-green-600 dark:text-green-400' :
-                    insight.type === 'warning' ? 'text-amber-600 dark:text-amber-400' :
-                    insight.type === 'critical' ? 'text-red-600 dark:text-red-400' :
-                    'text-blue-600 dark:text-blue-400'
-                  }`}
-                >
-                  {isExpanded ? 'Show less' : 'Show more'}
-                </button>
-              )}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-600">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className={`text-xs w-full min-h-[2rem] px-2 py-1 whitespace-normal text-center leading-tight font-medium ${
-            insight.type === 'success' 
-              ? 'border-green-400 dark:border-green-500 text-green-800 dark:text-green-100 hover:bg-green-100 dark:hover:bg-green-800/50 bg-green-50/50 dark:bg-green-900/20' :
-            insight.type === 'warning' 
-              ? 'border-amber-400 dark:border-amber-500 text-amber-800 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-800/50 bg-amber-50/50 dark:bg-amber-900/20' :
-            insight.type === 'critical' 
-              ? 'border-red-400 dark:border-red-500 text-red-800 dark:text-red-100 hover:bg-red-100 dark:hover:bg-red-800/50 bg-red-50/50 dark:bg-red-900/20' :
-            'border-blue-400 dark:border-blue-500 text-blue-800 dark:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-800/50 bg-blue-50/50 dark:bg-blue-900/20'
-          }`}
-          title={insight.action}
-        >
-          <span className="break-words hyphens-auto" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-            {insight.action}
-          </span>
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// Component for recommendation cards with overflow handling
-interface RecommendationCardProps {
-  recommendation: {
-    id: string
+    moduleTitle: string
+    value: number
+    affectedStudents: number
+    totalStudents: number
+    severity: 'high' | 'medium' | 'low'
+  }>
+  classPerformanceInsights: Array<{
     type: string
     title: string
-    description: string
-    actionSteps?: string[]
-    priority: number
-  }
+    insight: string
+    metrics: any
+    trend: 'positive' | 'concerning' | 'stable'
+  }>
 }
 
-function RecommendationCard({ recommendation }: RecommendationCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const shouldTruncate = recommendation.description.length > 90
-
-  return (
-    <div 
-      className={`p-3 rounded-lg border transition-all duration-200 h-full flex flex-col ${
-        recommendation.priority <= 2 ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700' :
-        recommendation.priority === 3 ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700' :
-        'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700'
-      }`}
-    >
-      <div className="flex-1 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <h5 className={`text-xs font-medium leading-tight break-words hyphens-auto flex-1 ${
-            recommendation.priority <= 2 ? 'text-red-800 dark:text-red-200' :
-            recommendation.priority === 3 ? 'text-amber-800 dark:text-amber-200' :
-            'text-blue-800 dark:text-blue-200'
-          }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-            {recommendation.title}
-          </h5>
-          <Badge variant="outline" className="text-xs flex-shrink-0 ml-1 dark:border-gray-600 dark:text-gray-300">
-            P{recommendation.priority}
-          </Badge>
-        </div>
-        <div className="flex-1">
-          <p className={`text-xs break-words hyphens-auto leading-relaxed ${
-            recommendation.priority <= 2 ? 'text-red-700 dark:text-red-300' :
-            recommendation.priority === 3 ? 'text-amber-700 dark:text-amber-300' :
-            'text-blue-700 dark:text-blue-300'
-          }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-            {shouldTruncate && !isExpanded 
-              ? `${recommendation.description.substring(0, 90)}...` 
-              : recommendation.description
-            }
-            {shouldTruncate && (
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={`ml-1 underline hover:no-underline whitespace-nowrap text-xs ${
-                  recommendation.priority <= 2 ? 'text-red-600 dark:text-red-400' :
-                  recommendation.priority === 3 ? 'text-amber-600 dark:text-amber-400' :
-                  'text-blue-600 dark:text-blue-400'
-                }`}
-              >
-                {isExpanded ? 'less' : 'more'}
-              </button>
-            )}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
+interface CourseInsightsData {
+  courseOverview: Array<{
+    id: string
+    title: string
+    description: string
+    status: string
+    totalModules: number
+    totalStudents: number
+    averageProgress: number
+    totalSessions: number
+    completionRate: number
+    averageScore: number
+    totalAttempts: number
+    createdAt: string
+    lastUpdated: string
+  }>
+  moduleInsights: Array<{
+    id: string
+    title: string
+    courseTitle: string
+    description: string
+    totalStudents: number
+    completedStudents: number
+    completionRate: number
+    averageScore: number
+    needRemedial: number
+    remedialRate: number
+    totalSessions: number
+    totalMaterials: number
+    difficulty: 'low' | 'medium' | 'high'
+    engagement: 'low' | 'medium' | 'high'
+  }>
+  contentEngagement: Array<{
+    id: string
+    title: string
+    moduleTitle: string
+    fileType: string
+    relatedSessions: number
+    studentsAccessed: number
+    engagementScore: number
+    effectiveness: number
+  }>
+  materialEffectiveness: Record<string, {
+    count: number
+    totalSessions: number
+    totalStudents: number
+    avgEffectiveness: number
+  }>
+  courseCompletion: {
+    totalCourses: number
+    activeCourses: number
+    totalModules: number
+    totalMaterials: number
+    totalEnrollments: number
+    averageCourseCompletion: number
+    totalSessions: number
+    sessionsPerStudent: number
+  }
 }
 
 export default function InstructorAnalytics() {
   const { user } = useAuth()
-  const [timeRange, setTimeRange] = useState('month')
-  const [showDetailedView, setShowDetailedView] = useState(false)
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
-  const [aiInsights, setAIInsights] = useState<AIInsightsData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [detailedEngagement, setDetailedEngagement] = useState<DetailedEngagementData | null>(null)
+  const [studyTechniquesData, setStudyTechniquesData] = useState<StudyTechniquesDetailedData | null>(null)
+  const [aiInsightsData, setAIInsightsData] = useState<AIInsightsData | null>(null)
+  const [courseInsightsData, setCourseInsightsData] = useState<CourseInsightsData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [activeTimeRange, setActiveTimeRange] = useState('month')
+  const [activeTab, setActiveTab] = useState('overview')
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch analytics data
-  const fetchAnalyticsData = async () => {
-    if (!user?.id) {
-      console.log('No user authenticated')
-      setError('Please log in to view analytics')
-      setLoading(false)
-      return
-    }
-
+  const fetchAnalyticsData = async (timeRange: string = 'month') => {
     try {
-      setLoading(true)
+      setIsLoading(true)
       setError(null)
       
-      const [analyticsResponse, aiResponse, techniquesResponse, engagementResponse] = await Promise.all([
-        fetch(`/api/instructor/analytics?timeRange=${timeRange}`, {
-          headers: {
-            'X-User-ID': user.id,
-            'X-User-Role': user.role
-          }
-        }),
-        fetch(`/api/instructor/analytics/ai-insights?timeRange=${timeRange}`, {
-          headers: {
-            'X-User-ID': user.id,
-            'X-User-Role': user.role
-          }
-        }),
-        fetch(`/api/instructor/analytics/study-techniques?timeRange=${timeRange}`, {
-          headers: {
-            'X-User-ID': user.id,
-            'X-User-Role': user.role
-          }
-        }),
-        fetch(`/api/instructor/analytics/student-engagement?timeRange=${timeRange}`, {
-          headers: {
-            'X-User-ID': user.id,
-            'X-User-Role': user.role
-          }
-        })
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-User-ID': user?.id || ''
+      }
+
+      // Fetch all analytics data in parallel
+      const [
+        mainAnalytics,
+        detailedEngagementResponse,
+        studyTechniquesResponse,
+        aiInsightsResponse,
+        courseInsightsResponse
+      ] = await Promise.all([
+        fetch(`/api/instructor/analytics?timeRange=${timeRange}`, { headers }),
+        fetch(`/api/instructor/analytics/detailed-student-engagement?timeRange=${timeRange}`, { headers }),
+        fetch(`/api/instructor/analytics/study-techniques-detailed?timeRange=${timeRange}`, { headers }),
+        fetch(`/api/instructor/analytics/ai-insights-detailed?timeRange=${timeRange}`, { headers }),
+        fetch(`/api/instructor/analytics/course-insights?timeRange=${timeRange}`, { headers })
       ])
 
-      let baseAnalytics = null
-      if (analyticsResponse.ok) {
-        const analyticsResult = await analyticsResponse.json()
-        baseAnalytics = analyticsResult.data
+      if (!mainAnalytics.ok) {
+        throw new Error('Failed to fetch main analytics')
       }
 
-      // Merge study techniques data if available
-      if (techniquesResponse.ok) {
-        const techniquesResult = await techniquesResponse.json()
-        if (baseAnalytics && techniquesResult.data) {
-          baseAnalytics.studyTechniques = techniquesResult.data.techniques || []
-          baseAnalytics.techniquesSummary = techniquesResult.data.summary || {}
-        }
+      const mainData = await mainAnalytics.json()
+      setAnalyticsData(mainData.data)
+
+      if (detailedEngagementResponse.ok) {
+        const engagementData = await detailedEngagementResponse.json()
+        setDetailedEngagement(engagementData.data)
       }
 
-      // Merge engagement data if available
-      if (engagementResponse.ok) {
-        const engagementResult = await engagementResponse.json()
-        if (baseAnalytics && engagementResult.data) {
-          baseAnalytics.studentEngagement = engagementResult.data.engagement || {}
-        }
+      if (studyTechniquesResponse.ok) {
+        const techniquesData = await studyTechniquesResponse.json()
+        setStudyTechniquesData(techniquesData.data)
       }
 
-      if (baseAnalytics) {
-        setAnalyticsData(baseAnalytics)
-      } else {
-        throw new Error('Failed to fetch analytics data')
+      if (aiInsightsResponse.ok) {
+        const insightsData = await aiInsightsResponse.json()
+        setAIInsightsData(insightsData.data)
       }
 
-      if (aiResponse.ok) {
-        const aiResult = await aiResponse.json()
-        setAIInsights(aiResult.data)
-      } else {
-        console.warn('AI insights failed to load')
-        setAIInsights({ insights: [], recommendations: [], aiStatus: 'error' })
+      if (courseInsightsResponse.ok) {
+        const courseData = await courseInsightsResponse.json()
+        setCourseInsightsData(courseData.data)
       }
 
     } catch (err) {
-      console.error('Error fetching analytics:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load analytics data'
-      setError(`Analytics Error: ${errorMessage}`)
-      
-      // Set empty fallback data with proper structure
-      setAnalyticsData({
-        keyMetrics: { 
-          courseEffectiveness: 0, 
-          studentEngagement: 0, 
-          contentGenerated: 0, 
-          interventionsSent: 0 
-        },
-        studyTechniques: [],
-        modulePerformance: [],
-        studentEngagement: { peakHours: [], contentTypes: [] },
-        weeklyPerformance: { 
-          averageQuizScores: 0, 
-          moduleCompletion: 0, 
-          studySessionDuration: 0, 
-          contentEngagement: 0, 
-          interventionsSent: 0 
-        },
-        totalStudents: 0,
-        activeStudents: 0
-      })
-      setAIInsights({ 
-        insights: [], 
-        recommendations: [], 
-        aiStatus: 'error' 
-      })
+      console.error('Analytics fetch error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load analytics')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    if (user) {
-      fetchAnalyticsData()
+    if (user?.id) {
+      fetchAnalyticsData(activeTimeRange)
     }
-  }, [user, timeRange])
-
-  const handleTimeRangeChange = (newRange: string) => {
-    setTimeRange(newRange)
-  }
+  }, [user?.id, activeTimeRange])
 
   const handleRefresh = () => {
-    fetchAnalyticsData()
+    fetchAnalyticsData(activeTimeRange)
   }
 
-  if (loading) {
+  if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">Loading teaching analytics...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !analyticsData) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
-          <Button onClick={handleRefresh}>Try Again</Button>
-        </div>
+      <div className="p-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              Please sign in to view analytics
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Teaching Analytics</h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-1">
-              AI-powered insights for {analyticsData?.totalStudents || 0} students
-              {error && <span className="text-amber-600"> (Limited data available)</span>}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <div className="relative">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowDetailedView(!showDetailedView)}
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                {timeRange === 'week' ? 'Last Week' : 
-                 timeRange === 'month' ? 'Last Month' : 
-                 timeRange === 'quarter' ? 'Last Quarter' : 'Last Month'}
-              </Button>
-              {showDetailedView && (
-                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border rounded-lg shadow-lg z-10 min-w-[120px]">
-                  {['week', 'month', 'quarter'].map(range => (
-                    <button
-                      key={range}
-                      onClick={() => {
-                        handleTimeRangeChange(range)
-                        setShowDetailedView(false)
-                      }}
-                      className="block w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm capitalize"
-                    >
-                      Last {range}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <Button variant="outline" size="sm" onClick={handleRefresh}>
-              <Download className="h-4 w-4 mr-2" />
-              Refresh Data
-            </Button>
-            <Button 
-              size="sm" 
-              className={`${aiInsights?.aiStatus === 'success' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'} text-white`}
-              onClick={() => window.scrollTo({ top: document.getElementById('ai-insights')?.offsetTop, behavior: 'smooth' })}
-            >
-              <Brain className="h-4 w-4 mr-2" />
-              {aiInsights?.aiStatus === 'success' ? 'AI Insights' : 'AI Limited'}
-            </Button>
-          </div>
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Teaching Analytics</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-1">
+            Comprehensive insights into your students' learning progress and engagement
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          
+          <ExportDialog activeTimeRange={activeTimeRange} />
         </div>
       </div>
 
-      {/* Key Teaching Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">Course Effectiveness</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{analyticsData?.keyMetrics.courseEffectiveness || 0}%</div>
-            <p className="text-xs text-green-600 mt-1">
-              {analyticsData?.keyMetrics.courseEffectiveness > 70 ? 'Above target' : 
-               analyticsData?.keyMetrics.courseEffectiveness > 60 ? 'On track' : 'Needs improvement'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">Student Engagement</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{analyticsData?.keyMetrics.studentEngagement || 0}</div>
-            <p className="text-xs text-emerald-600 mt-1">
-              of {analyticsData?.totalStudents || 0} students active
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">Study Sessions</CardTitle>
-            <Brain className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{analyticsData?.keyMetrics.contentGenerated || 0}</div>
-            <p className="text-xs text-blue-600 mt-1">Total sessions completed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">AI Recommendations</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{aiInsights?.recommendations?.length || 0}</div>
-            <p className="text-xs text-amber-600 mt-1">
-              {aiInsights?.aiStatus === 'success' 
-                ? 'AI-generated insights' 
-                : aiInsights?.aiStatus === 'insufficient_data' 
-                  ? 'Insufficient data for AI analysis'
-                  : aiInsights?.aiStatus === 'limited_data'
-                    ? 'Limited insights due to sparse data'
-                    : 'Basic analytics available'
-              }
-            </p>
-          </CardContent>
-        </Card>
+      {/* Time Range Selector */}
+      <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 p-1 rounded-lg w-fit">
+        {['week', 'month', 'quarter'].map((range) => (
+          <Button
+            key={range}
+            variant={activeTimeRange === range ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTimeRange(range)}
+            className="capitalize"
+          >
+            {range}
+          </Button>
+        ))}
       </div>
 
-      {/* Study Techniques Performance & Module Performance */}
-      <div className="space-y-6 mb-8">
-        {/* Study Techniques Performance - Full Width */}
-        {analyticsData?.studyTechniques && analyticsData.studyTechniques.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-white">Study Techniques Performance</CardTitle>
-              <CardDescription className="dark:text-gray-300">How different study methods perform in your courses</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {analyticsData.studyTechniques.map((technique, index) => {
-                  const techniqueName = technique.technique || technique.name || 'Unknown Technique'
-                  const effectivenessValue = technique.effectivenessPercentage || technique.averageScore || 0
-                  const adoptionValue = technique.adoptionRate || technique.usagePercentage || 0
-                  const performanceValue = technique.averagePerformance || technique.averageScore || effectivenessValue
-                  
-                  return (
-                    <div key={index} className="space-y-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-gray-900 dark:text-white">{techniqueName}</h4>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {technique.totalSessions} sessions • {technique.uniqueUsers || 0} students
-                          </p>
-                        </div>
-                        <Badge 
-                          variant="default" 
-                          className={`ml-2 flex-shrink-0 ${
-                            performanceValue >= 80 ? 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300' :
-                            performanceValue >= 60 ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300' :
-                            'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
-                          }`}
-                        >
-                          {effectivenessValue}% effective
-                        </Badge>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        {/* Effectiveness Bar */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Effectiveness</span>
-                            <span className="font-medium text-gray-900 dark:text-white">{effectivenessValue}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                            <div 
-                              className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${Math.min(effectivenessValue, 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                        
-                        {/* Usage Bar */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Adoption Rate</span>
-                            <span className="font-medium text-gray-900 dark:text-white">{adoptionValue}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                            <div 
-                              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${Math.min(adoptionValue, 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="flex-1">
-                          <Eye className="h-4 w-4 mr-1" />
-                          Details
-                        </Button>
-                        {performanceValue >= 70 && (
-                          <Button size="sm" variant="outline" className="flex-1">
-                            <MessageSquare className="h-4 w-4 mr-1" />
-                            Recommend
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Module Performance Analysis - Full Width */}
-        {analyticsData?.modulePerformance && analyticsData.modulePerformance.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-white">Module Performance Analysis</CardTitle>
-              <CardDescription className="dark:text-gray-300">Student performance breakdown by course modules</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {analyticsData.modulePerformance.map((module) => (
-                  <div key={module.id} className="space-y-3 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900 dark:text-white">{module.title}</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge 
-                            variant="outline"
-                            className={`${
-                              module.status === 'excellent' ? 'border-green-500 text-green-700 dark:text-green-400' :
-                              module.status === 'good' ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' :
-                              module.status === 'needs_improvement' ? 'border-amber-500 text-amber-700 dark:text-amber-400' :
-                              'border-red-500 text-red-700 dark:text-red-400'
-                            }`}
-                          >
-                            {module.status === 'excellent' ? 'Excellent' :
-                             module.status === 'good' ? 'Good' :
-                             module.status === 'needs_improvement' ? 'Needs Improvement' : 'Critical'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-gray-900 dark:text-white">{module.averageScore}%</div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">Avg Score</p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">Completed:</span>
-                        <span className="font-medium ml-1 text-gray-900 dark:text-white">
-                          {module.studentsCompleted}/{module.totalStudents}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 dark:text-gray-400">Completion Rate:</span>
-                        <span className="font-medium ml-1 text-gray-900 dark:text-white">
-                          {Math.round((module.studentsCompleted / Math.max(module.totalStudents, 1)) * 100)}%
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3">
-                      <div 
-                        className={`h-3 rounded-full transition-all duration-300 ${
-                          module.averageScore >= 80 ? 'bg-green-500' :
-                          module.averageScore >= 70 ? 'bg-emerald-500' :
-                          module.averageScore >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${(module.studentsCompleted / Math.max(module.totalStudents, 1)) * 100}%` }}
-                      ></div>
-                    </div>
-
-                    {module.averageScore < 70 && (
-                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                        <div className="flex items-center">
-                          <AlertTriangle className="h-4 w-4 text-amber-600 mr-2" />
-                          <p className="text-sm text-amber-700 dark:text-amber-300">
-                            Below target performance. Consider additional resources or review sessions.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* AI Teaching Insights & Student Engagement Patterns */}
-      <div className="space-y-6 mb-8" id="ai-insights">
-        {/* Determine if we have engagement data to show */}
-        {(() => {
-          const hasEngagementData = (analyticsData?.studentEngagement?.peakHours && analyticsData.studentEngagement.peakHours.length > 0) ||
-            (analyticsData?.studentEngagement?.contentTypes && analyticsData.studentEngagement.contentTypes.length > 0);
-          
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 p-1 rounded-lg w-fit">
+        {[
+          { id: 'overview', label: 'Overview', icon: BarChart3 },
+          { id: 'students', label: 'Student Engagement', icon: Users },
+          { id: 'techniques', label: 'Study Techniques', icon: Brain },
+          { id: 'courses', label: 'Course & Module Insights', icon: BookOpen },
+          { id: 'insights', label: 'AI Insights', icon: Lightbulb }
+        ].map((tab) => {
+          const Icon = tab.icon
           return (
-            <div className={hasEngagementData ? "grid grid-cols-1 xl:grid-cols-2 gap-6" : ""}>
-              {/* AI Teaching Insights */}
-              <Card className={hasEngagementData ? "" : "mx-auto max-w-6xl"}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-                    <Sparkles className={`h-5 w-5 ${
-                      aiInsights?.aiStatus === 'success' ? 'text-blue-500' : 'text-amber-500'
-                    }`} />
-                    AI Teaching Insights
-                  </CardTitle>
-                  <CardDescription className="dark:text-gray-300">
-                    {aiInsights?.aiStatus === 'success' 
-                      ? 'AI-powered recommendations to improve teaching effectiveness'
-                      : 'Limited AI insights available - using basic analytics'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="max-h-96 overflow-y-auto">
-                  <div className={`gap-4 ${hasEngagementData ? "grid grid-cols-1 lg:grid-cols-1 xl:grid-cols-2" : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3"} ${aiInsights?.insights && aiInsights.insights.length === 0 ? "flex" : ""}`}>
-                    {aiInsights?.insights && aiInsights.insights.length > 0 ? (
-                      aiInsights.insights.slice(0, hasEngagementData ? 4 : 6).map((insight, index) => (
-                        <InsightCard key={insight.id} insight={insight} />
-                      ))
-                    ) : (
-                      <div className={`text-center py-8 flex flex-col items-center justify-center ${hasEngagementData ? "" : "md:col-span-2 xl:col-span-3"} w-full`}>
-                        <Sparkles className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-600 dark:text-gray-400">No AI insights available yet.</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-                          {aiInsights?.aiStatus === 'error' 
-                            ? 'AI service temporarily unavailable.'
-                            : 'More data needed for AI analysis.'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Student Engagement Patterns - Only show if has data */}
-              {hasEngagementData && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-gray-900 dark:text-white">Student Engagement Patterns</CardTitle>
-                    <CardDescription className="dark:text-gray-300">When and how students interact with your course content</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {/* Peak Activity Times */}
-                      {analyticsData?.studentEngagement?.peakHours && analyticsData.studentEngagement.peakHours.length > 0 && (
-                        <div>
-                          <h4 className="font-medium text-gray-900 dark:text-white mb-3">Peak Study Hours</h4>
-                          <div className="space-y-3">
-                            {analyticsData.studentEngagement.peakHours.slice(0, 4).map((period, index) => (
-                              <div key={index} className="space-y-1">
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-gray-600 dark:text-gray-400">{period.time}</span>
-                                  <span className="font-medium text-gray-900 dark:text-white">
-                                    {period.activity} sessions ({period.percentage}%)
-                                  </span>
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                                  <div 
-                                    className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${Math.min(period.percentage, 100)}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Content Engagement */}
-                      {analyticsData?.studentEngagement?.contentTypes && analyticsData.studentEngagement.contentTypes.length > 0 && (
-                        <div>
-                          <h4 className="font-medium text-gray-900 dark:text-white mb-3">Study Technique Performance</h4>
-                          <div className="space-y-3">
-                            {analyticsData.studentEngagement.contentTypes.map((content, index) => (
-                              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                <div className="flex items-center">
-                                  <div 
-                                    className="w-3 h-3 rounded-full mr-3" 
-                                    style={{ backgroundColor: content.color }}
-                                  ></div>
-                                  <span className="text-sm font-medium text-gray-900 dark:text-white">{content.type}</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                    {content.engagement} sessions
-                                  </span>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {content.percentage}% of total
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            <Button
+              key={tab.id}
+              variant={activeTab === tab.id ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-2"
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </Button>
           )
-        })()}
+        })}
       </div>
 
-      {/* Weekly Performance Summary */}
+      {error && (
+        <Card className="border-red-200 dark:border-red-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              <span>Error: {error}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Content based on active tab */}
+      {activeTab === 'overview' && (
+        <OverviewTab 
+          data={analyticsData}
+          isLoading={isLoading}
+          aiInsights={aiInsightsData}
+        />
+      )}
+      
+      {activeTab === 'students' && (
+        <StudentEngagementTab 
+          data={detailedEngagement}
+          mainData={analyticsData}
+          isLoading={isLoading}
+        />
+      )}
+      
+      {activeTab === 'techniques' && (
+        <StudyTechniquesTab 
+          data={studyTechniquesData}
+          isLoading={isLoading}
+        />
+      )}
+      
+      {activeTab === 'courses' && (
+        <CourseInsightsTab 
+          data={courseInsightsData}
+          isLoading={isLoading}
+        />
+      )}
+      
+      {activeTab === 'insights' && (
+        <AIInsightsTab 
+          data={aiInsightsData}
+          isLoading={isLoading}
+        />
+      )}
+    </div>
+  )
+}
+
+// Overview Tab Component
+function OverviewTab({ data, isLoading, aiInsights }: { 
+  data: AnalyticsData | null
+  isLoading: boolean
+  aiInsights: AIInsightsData | null
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[...Array(8)].map((_, i) => (
+          <Card key={i}>
+            <CardContent className="pt-6">
+              <Skeleton className="h-4 w-24 mb-2" />
+              <Skeleton className="h-8 w-16 mb-4" />
+              <Skeleton className="h-3 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            No analytics data available
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard
+          title="Course Effectiveness"
+          value={`${data.keyMetrics.courseEffectiveness}%`}
+          icon={Target}
+          trend={data.keyMetrics.courseEffectiveness >= 80 ? 'up' : 'stable'}
+          description="Overall course performance score"
+        />
+        
+        <MetricCard
+          title="Active Students"
+          value={data.keyMetrics.studentEngagement.toString()}
+          icon={Users}
+          trend="up"
+          description={`${data.totalStudents} total enrolled`}
+        />
+        
+        <MetricCard
+          title="Study Sessions"
+          value={data.keyMetrics.contentGenerated.toString()}
+          icon={Activity}
+          trend="up"
+          description="Total learning sessions completed"
+        />
+        
+        <MetricCard
+          title="Average Score"
+          value={`${data.weeklyPerformance.averageQuizScores}%`}
+          icon={TrendingUp}
+          trend={data.weeklyPerformance.averageQuizScores >= 75 ? 'up' : 'stable'}
+          description="Student performance average"
+        />
+      </div>
+
+      {/* Study Techniques Overview */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-gray-900 dark:text-white">Teaching Performance Summary</CardTitle>
-          <CardDescription className="dark:text-gray-300">
-            Overview of your course impact and student outcomes for the selected time period
-          </CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-purple-500" />
+            Study Techniques Usage
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900 dark:text-white">Student Success Metrics</h4>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center min-w-0">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">Average Scores</span>
-                  <span className={`font-medium flex-shrink-0 ml-2 ${
-                    (analyticsData?.weeklyPerformance?.averageQuizScores || 0) >= 80 ? 'text-green-600 dark:text-green-400' :
-                    (analyticsData?.weeklyPerformance?.averageQuizScores || 0) >= 70 ? 'text-emerald-600 dark:text-emerald-400' :
-                    'text-amber-600 dark:text-amber-400'
-                  }`}>
-                    {analyticsData?.weeklyPerformance?.averageQuizScores || 0}%
-                  </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {data.studyTechniques.map((technique, index) => (
+              <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-sm">{technique.technique}</h4>
+                  <Badge variant={technique.effectivenessPercentage >= 80 ? "default" : "secondary"}>
+                    {technique.effectivenessPercentage}%
+                  </Badge>
                 </div>
-                <div className="flex justify-between items-center min-w-0">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">Module Completion</span>
-                  <span className={`font-medium flex-shrink-0 ml-2 ${
-                    (analyticsData?.weeklyPerformance?.moduleCompletion || 0) >= 90 ? 'text-emerald-600 dark:text-emerald-400' :
-                    (analyticsData?.weeklyPerformance?.moduleCompletion || 0) >= 70 ? 'text-blue-600 dark:text-blue-400' :
-                    'text-amber-600 dark:text-amber-400'
-                  }`}>
-                    {analyticsData?.weeklyPerformance?.moduleCompletion || 0}%
-                  </span>
-                </div>
-                <div className="flex justify-between items-center min-w-0">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">Study Session Duration</span>
-                  <span className="font-medium text-blue-600 dark:text-blue-400 flex-shrink-0 ml-2">
-                    {analyticsData?.weeklyPerformance?.studySessionDuration || 0} min avg
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900 dark:text-white">Teaching Effectiveness</h4>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center min-w-0">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">Student Engagement</span>
-                  <span className={`font-medium flex-shrink-0 ml-2 ${
-                    (analyticsData?.weeklyPerformance?.contentEngagement || 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
-                    (analyticsData?.weeklyPerformance?.contentEngagement || 0) >= 60 ? 'text-blue-600 dark:text-blue-400' :
-                    'text-amber-600 dark:text-amber-400'
-                  }`}>
-                    {analyticsData?.weeklyPerformance?.contentEngagement || 0}%
-                  </span>
-                </div>
-                <div className="flex justify-between items-center min-w-0">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">Active Students</span>
-                  <span className="font-medium text-blue-600 dark:text-blue-400 flex-shrink-0 ml-2">
-                    {analyticsData?.activeStudents || 0} of {analyticsData?.totalStudents || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center min-w-0">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 truncate">Study Sessions</span>
-                  <span className="font-medium text-purple-600 dark:text-purple-400 flex-shrink-0 ml-2">
-                    {analyticsData?.keyMetrics?.contentGenerated || 0} completed
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4 min-w-0">
-              <h4 className="font-medium text-gray-900 dark:text-white">AI Recommendations</h4>
-              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
-                {aiInsights?.recommendations && aiInsights.recommendations.length > 0 ? (
-                  aiInsights.recommendations.slice(0, 3).map((rec, index) => (
-                    <RecommendationCard key={rec.id} recommendation={rec} />
-                  ))
-                ) : (
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <p className="text-xs text-gray-600 dark:text-gray-400 break-words hyphens-auto leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                      {aiInsights?.aiStatus === 'error' 
-                        ? 'AI recommendations temporarily unavailable'
-                        : aiInsights?.aiStatus === 'insufficient_data'
-                          ? 'Insufficient data for AI recommendations'
-                          : 'No specific recommendations at this time - continue current approach'}
-                    </p>
+                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex justify-between">
+                    <span>Sessions:</span>
+                    <span className="font-medium">{technique.totalSessions}</span>
                   </div>
-                )}
+                  <div className="flex justify-between">
+                    <span>Users:</span>
+                    <span className="font-medium">{technique.uniqueUsers}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Adoption:</span>
+                    <span className="font-medium">{technique.adoptionRate}%</span>
+                  </div>
+                </div>
               </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Module Performance with Interactive Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-blue-500" />
+              Module Performance Chart
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.modulePerformance.length > 0 ? (
+              <ModulePerformanceChart data={data.modulePerformance.slice(0, 8)} />
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-500">
+                No module performance data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-blue-500" />
+              Module Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4 max-h-80 overflow-y-auto">
+              {data.modulePerformance.slice(0, 5).map((module, index) => (
+                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{module.title}</h4>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {module.studentsCompleted} of {module.totalStudents} students completed
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-medium">{module.averageScore}%</div>
+                      <div className="text-sm text-gray-500">
+                        {Math.round((module.studentsCompleted / module.totalStudents) * 100)}% completion
+                      </div>
+                    </div>
+                    <Badge 
+                      variant={
+                        module.status === 'excellent' ? 'default' :
+                        module.status === 'good' ? 'secondary' :
+                        module.status === 'needs_improvement' ? 'outline' : 'destructive'
+                      }
+                    >
+                      {module.status.replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Performance Alerts */}
+      {aiInsights?.performanceAlerts && aiInsights.performanceAlerts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Performance Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {aiInsights.performanceAlerts.slice(0, 3).map((alert, index) => (
+                <div key={index} className={`p-3 rounded-lg border-l-4 ${
+                  alert.type === 'critical' ? 'bg-red-50 dark:bg-red-900/20 border-red-500' :
+                  alert.type === 'warning' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500' :
+                  'bg-blue-50 dark:bg-blue-900/20 border-blue-500'
+                }`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-medium">{alert.title}</h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        {alert.description}
+                      </p>
+                    </div>
+                    <Badge variant={alert.type === 'critical' ? 'destructive' : 'outline'}>
+                      {alert.value}%
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// Student Engagement Tab Component
+function StudentEngagementTab({ data, mainData, isLoading }: { 
+  data: DetailedEngagementData | null
+  mainData: AnalyticsData | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-6">
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!data || !mainData) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            No student engagement data available
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Engagement Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <MetricCard
+          title="Total Students"
+          value={mainData.totalStudents.toString()}
+          icon={Users}
+          trend="stable"
+          description="Enrolled in your courses"
+        />
+        
+        <MetricCard
+          title="Active Students"
+          value={mainData.activeStudents.toString()}
+          icon={Activity}
+          trend="up"
+          description={`${Math.round((mainData.activeStudents / mainData.totalStudents) * 100)}% engagement rate`}
+        />
+        
+        <MetricCard
+          title="Peak Activity"
+          value={mainData.studentEngagement.peakHours[0]?.time.split(' - ')[0] || 'N/A'}
+          icon={Clock}
+          trend="stable"
+          description="Most active time period"
+        />
+      </div>
+
+      {/* Engagement Trends Chart */}
+      {data.engagementTrends.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-green-500" />
+              Engagement Trends
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EngagementTrendsChart data={data.engagementTrends} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Peak Hours and Study Heatmap */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-green-500" />
+              Peak Study Hours
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {mainData.studentEngagement.peakHours.map((hour, index) => (
+                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="font-medium">{hour.time}</div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                    {hour.activity}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {hour.percentage}% of activity
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-purple-500" />
+              Study Activity Heatmap
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.studyHeatmap && data.studyHeatmap.length > 0 ? (
+              <StudyHeatmapChart data={data.studyHeatmap} />
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-500">
+                No heatmap data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Student List */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-500" />
+            Student Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {data.studentsList.slice(0, 10).map((student, index) => (
+              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-medium">{student.name}</h4>
+                    <Badge 
+                      variant={
+                        student.engagementLevel === 'high' ? 'default' :
+                        student.engagementLevel === 'medium' ? 'secondary' : 'outline'
+                      }
+                    >
+                      {student.engagementLevel}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {student.totalSessions} sessions • {student.preferredTechnique}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">{student.averagePerformance}%</div>
+                  <div className="text-sm text-gray-500">
+                    {student.moduleCompletionRate}% modules completed
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// Study Techniques Tab Component
+function StudyTechniquesTab({ data, isLoading }: { 
+  data: StudyTechniquesDetailedData | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-6">
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            No study techniques data available
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Technique Comparison with Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-purple-500" />
+              Technique Comparison Chart
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.techniqueComparison.length > 0 ? (
+              <StudyTechniquesChart data={data.techniqueComparison.map(t => ({
+                type: t.technique,
+                engagement: t.sessions,
+                percentage: Math.round((t.sessions / data.techniqueComparison.reduce((sum, tech) => sum + tech.sessions, 1)) * 100),
+                color: t.color
+              }))} />
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-500">
+                No technique comparison data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-purple-500" />
+              Technique Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-80 overflow-y-auto">
+              {data.techniqueComparison.map((technique, index) => (
+                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-sm">{technique.technique}</h4>
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: technique.color }}
+                    />
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Sessions:</span>
+                      <span className="font-medium">{technique.sessions}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Users:</span>
+                      <span className="font-medium">{technique.users}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Adoption:</span>
+                      <span className="font-medium">{technique.adoptionRate}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Avg/User:</span>
+                      <span className="font-medium">{technique.sessionsPerUser}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Time-based Analysis Chart */}
+      {data.timeBasedAnalysis && data.timeBasedAnalysis.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-orange-500" />
+              Technique Usage Over Time
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TimeBasedTechniqueChart data={data.timeBasedAnalysis} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Effectiveness Analysis */}
+      {data.effectivenessMetrics && Object.keys(data.effectivenessMetrics).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-green-500" />
+              Technique Effectiveness Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TechniqueEffectivenessChart data={data.effectivenessMetrics} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Individual Technique Analytics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Active Recall */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="h-5 w-5" />
+              Active Recall
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Sessions:</span>
+                <span className="font-medium">{data.activeRecallAnalytics?.totalSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Completed:</span>
+                <span className="font-medium">{data.activeRecallAnalytics?.completedSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Attempts:</span>
+                <span className="font-medium">{data.activeRecallAnalytics?.totalAttempts || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Avg Accuracy:</span>
+                <span className="font-medium">{data.activeRecallAnalytics?.averageAccuracy || 0}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Active Users:</span>
+                <span className="font-medium">{data.activeRecallAnalytics?.userEngagement || 0}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pomodoro */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-600">
+              <Timer className="h-5 w-5" />
+              Pomodoro
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Sessions:</span>
+                <span className="font-medium">{data.pomodoroAnalytics?.totalSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Completed:</span>
+                <span className="font-medium">{data.pomodoroAnalytics?.completedSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Cycles:</span>
+                <span className="font-medium">{data.pomodoroAnalytics?.totalCycles || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Avg Focus Score:</span>
+                <span className="font-medium">{data.pomodoroAnalytics?.averageFocusScore || 0}/10</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Study Time:</span>
+                <span className="font-medium">{data.pomodoroAnalytics?.totalStudyTime || 0}min</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Feynman */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <MessageSquare className="h-5 w-5" />
+              Feynman
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Sessions:</span>
+                <span className="font-medium">{data.feynmanAnalytics?.totalSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Completed:</span>
+                <span className="font-medium">{data.feynmanAnalytics?.completedSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Explanations:</span>
+                <span className="font-medium">{data.feynmanAnalytics?.totalExplanations || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Avg Score:</span>
+                <span className="font-medium">{data.feynmanAnalytics?.averageExplanationScore || 0}/10</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Avg Word Count:</span>
+                <span className="font-medium">{data.feynmanAnalytics?.averageWordCount || 0}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Retrieval Practice */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-purple-600">
+              <Brain className="h-5 w-5" />
+              Retrieval Practice
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Sessions:</span>
+                <span className="font-medium">{data.retrievalPracticeAnalytics?.totalSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Completed:</span>
+                <span className="font-medium">{data.retrievalPracticeAnalytics?.completedSessions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Total Questions:</span>
+                <span className="font-medium">{data.retrievalPracticeAnalytics?.totalQuestions || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Avg Accuracy:</span>
+                <span className="font-medium">{data.retrievalPracticeAnalytics?.averageAccuracy || 0}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Avg Response Time:</span>
+                <span className="font-medium">{data.retrievalPracticeAnalytics?.averageResponseTime || 0}s</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// AI Insights Tab Component
+function AIInsightsTab({ data, isLoading }: { 
+  data: AIInsightsData | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-6">
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            No AI insights available
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Teaching Recommendations */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-yellow-500" />
+            Teaching Recommendations
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {data.teachingRecommendations.slice(0, 5).map((rec, index) => (
+              <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h4 className="font-medium">{rec.title}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge 
+                        variant={rec.priority === 1 ? 'destructive' : rec.priority === 2 ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        Priority {rec.priority}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {rec.impact} impact
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {rec.confidence}% confidence
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {rec.affectedStudentsCount} students
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  {rec.description}
+                </p>
+                <div className="text-sm bg-blue-50 dark:bg-blue-900/20 p-3 rounded border-l-2 border-blue-500">
+                  <strong>Action:</strong> {rec.actionableAdvice}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Student Interventions */}
+      {data.studentInterventions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Student Interventions Needed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {data.studentInterventions.slice(0, 5).map((intervention, index) => (
+                <div key={index} className={`p-4 rounded-lg border-l-4 ${
+                  intervention.interventionLevel === 'urgent' ? 'bg-red-50 dark:bg-red-900/20 border-red-500' :
+                  intervention.interventionLevel === 'high' ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-500' :
+                  'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500'
+                }`}>
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="font-medium">{intervention.studentName}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge 
+                          variant={intervention.interventionLevel === 'urgent' ? 'destructive' : 'default'}
+                          className="text-xs"
+                        >
+                          {intervention.interventionLevel}
+                        </Badge>
+                        <span className="text-xs text-gray-500">
+                          {intervention.sessionsAnalyzed} sessions analyzed
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-medium ${
+                        intervention.improvementTrend > 0 ? 'text-green-600' : 
+                        intervention.improvementTrend < 0 ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {intervention.improvementTrend > 0 ? '+' : ''}{intervention.improvementTrend}%
+                      </div>
+                      <div className="text-xs text-gray-500">trend</div>
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <strong className="text-sm">Issues:</strong>
+                    <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {intervention.reasons.map((reason, i) => (
+                        <li key={i}>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <strong className="text-sm">Recommended Actions:</strong>
+                    <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {intervention.recommendedActions.slice(0, 2).map((action, i) => (
+                        <li key={i}>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Class Performance Insights */}
+      {data.classPerformanceInsights.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-green-500" />
+              Class Performance Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {data.classPerformanceInsights.map((insight, index) => (
+                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="font-medium">{insight.title}</h4>
+                    <Badge 
+                      variant={insight.trend === 'positive' ? 'default' : insight.trend === 'concerning' ? 'destructive' : 'secondary'}
+                    >
+                      {insight.trend}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {insight.insight}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// Course Insights Tab Component
+function CourseInsightsTab({ data, isLoading }: { 
+  data: CourseInsightsData | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-6">
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            No course insights data available
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Course Completion Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard
+          title="Total Courses"
+          value={data.courseCompletion.totalCourses.toString()}
+          icon={BookOpen}
+          trend="stable"
+          description={`${data.courseCompletion.activeCourses} active`}
+        />
+        
+        <MetricCard
+          title="Total Modules"
+          value={data.courseCompletion.totalModules.toString()}
+          icon={Target}
+          trend="stable"
+          description={`${data.courseCompletion.totalMaterials} materials`}
+        />
+        
+        <MetricCard
+          title="Avg Completion"
+          value={`${data.courseCompletion.averageCourseCompletion}%`}
+          icon={CheckCircle}
+          trend={data.courseCompletion.averageCourseCompletion >= 75 ? 'up' : 'stable'}
+          description="Across all courses"
+        />
+        
+        <MetricCard
+          title="Sessions/Student"
+          value={data.courseCompletion.sessionsPerStudent.toString()}
+          icon={Activity}
+          trend="up"
+          description={`${data.courseCompletion.totalSessions} total sessions`}
+        />
+      </div>
+
+      {/* Course Overview */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-blue-500" />
+            Course Performance Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {data.courseOverview.map((course, index) => (
+              <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{course.title}</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+                      {course.description}
+                    </p>
+                    <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                      <span>{course.totalModules} modules</span>
+                      <span>{course.totalStudents} students</span>
+                      <span>{course.totalSessions} sessions</span>
+                      <Badge variant={course.status === 'active' ? 'default' : 'secondary'}>
+                        {course.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-lg">{course.averageScore}%</div>
+                    <div className="text-sm text-gray-500">avg score</div>
+                    <div className="font-medium">{course.completionRate}%</div>
+                    <div className="text-sm text-gray-500">completion</div>
+                  </div>
+                </div>
+                
+                {/* Progress bar */}
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${course.averageProgress}%` }}
+                  />
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {course.averageProgress}% average progress
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Module Insights */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-green-500" />
+            Module Performance Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {data.moduleInsights.slice(0, 10).map((module, index) => (
+              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-medium">{module.title}</h4>
+                    <Badge 
+                      variant={module.difficulty === 'low' ? 'default' : 
+                              module.difficulty === 'medium' ? 'secondary' : 'destructive'}
+                    >
+                      {module.difficulty} difficulty
+                    </Badge>
+                    <Badge 
+                      variant={module.engagement === 'high' ? 'default' : 
+                              module.engagement === 'medium' ? 'secondary' : 'outline'}
+                    >
+                      {module.engagement} engagement
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {module.courseTitle}
+                  </p>
+                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                    <span>{module.totalStudents} students</span>
+                    <span>{module.totalSessions} sessions</span>
+                    <span>{module.totalMaterials} materials</span>
+                    {module.needRemedial > 0 && (
+                      <span className="text-amber-600">
+                        {module.needRemedial} need remedial
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium text-lg">{module.averageScore}%</div>
+                  <div className="text-sm text-gray-500">avg score</div>
+                  <div className="font-medium">{module.completionRate}%</div>
+                  <div className="text-sm text-gray-500">
+                    {module.completedStudents}/{module.totalStudents} completed
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Content Engagement Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-purple-500" />
+              Content Engagement
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4 max-h-80 overflow-y-auto">
+              {data.contentEngagement.slice(0, 10).map((content, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm">{content.title}</h4>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {content.moduleTitle}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">
+                        {content.fileType}
+                      </Badge>
+                      <span className="text-xs text-gray-500">
+                        {content.studentsAccessed} students
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium">{content.engagementScore}%</div>
+                    <div className="text-xs text-gray-500">engagement</div>
+                    <div className="font-medium">{content.effectiveness}%</div>
+                    <div className="text-xs text-gray-500">effective</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-orange-500" />
+              Material Type Effectiveness
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(data.materialEffectiveness).map(([type, effectiveness], index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex-1">
+                    <h4 className="font-medium capitalize">{type}</h4>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      {effectiveness.count} materials • {effectiveness.totalStudents} students
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium">{effectiveness.avgEffectiveness}%</div>
+                    <div className="text-xs text-gray-500">effectiveness</div>
+                    <div className="text-sm text-gray-500">
+                      {effectiveness.totalSessions} sessions
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// Metric Card Component
+function MetricCard({ 
+  title, 
+  value, 
+  icon: Icon, 
+  trend, 
+  description 
+}: {
+  title: string
+  value: string
+  icon: any
+  trend: 'up' | 'down' | 'stable'
+  description?: string
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</p>
+            <p className="text-2xl font-bold">{value}</p>
+            {description && (
+              <p className="text-xs text-gray-500 mt-1">{description}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {trend === 'up' && <TrendingUp className="h-4 w-4 text-green-500" />}
+            {trend === 'down' && <TrendingDown className="h-4 w-4 text-red-500" />}
+            <Icon className="h-8 w-8 text-gray-400" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
