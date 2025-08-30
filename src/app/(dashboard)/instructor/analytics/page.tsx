@@ -37,7 +37,6 @@ import {
   TechniqueEffectivenessChart,
   PerformanceDistributionChart
 } from '@/components/analytics/interactive-charts'
-import { ExportDialog } from '@/components/analytics/export-dialog'
 
 interface AnalyticsData {
   keyMetrics: {
@@ -361,8 +360,6 @@ export default function InstructorAnalytics() {
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          
-          <ExportDialog activeTimeRange={activeTimeRange} />
         </div>
       </div>
 

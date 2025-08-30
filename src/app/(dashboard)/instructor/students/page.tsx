@@ -176,16 +176,6 @@ export default function InstructorStudents() {
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Students</h1>
             <p className="text-gray-600 dark:text-gray-300 mt-1">Monitor student progress in Criminal Jurisprudence and provide targeted intervention</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export Report
-            </Button>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white">
-              <Brain className="h-4 w-4 mr-2" />
-              AI Recommendations
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -259,10 +249,6 @@ export default function InstructorStudents() {
                   <option value="Medium">Medium Risk</option>
                   <option value="Low">Low Risk</option>
                 </select>
-                <Button variant="outline" size="sm">
-                  <Filter className="h-4 w-4 mr-2" />
-                  More Filters
-                </Button>
               </div>
             </div>
           </CardContent>

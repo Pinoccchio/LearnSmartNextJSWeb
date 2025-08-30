@@ -280,16 +280,6 @@ export default function InstructorCourse() {
               {selectedCourse?.description || 'Manage your course content and student progress'}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Eye className="h-4 w-4 mr-2" />
-              Preview Course
-            </Button>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              <Brain className="h-4 w-4 mr-2" />
-              Generate Content
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -338,7 +328,7 @@ export default function InstructorCourse() {
       </div>
 
       {/* Course Modules */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="mb-8">
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -357,7 +347,7 @@ export default function InstructorCourse() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {selectedCourse?.modules?.length > 0 ? (
                 selectedCourse.modules.map((module: any) => (
                   <div key={module.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-white dark:bg-gray-800">
@@ -438,93 +428,8 @@ export default function InstructorCourse() {
             </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-              <Sparkles className="h-5 w-5 text-blue-500" />
-              Content Suggestions
-            </CardTitle>
-            <CardDescription className="dark:text-gray-300">AI-powered recommendations to improve your course</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <div>
-                    <h4 className="font-medium text-blue-900 dark:text-blue-100">Add Interactive Case Studies</h4>
-                    <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                      Students respond well to real-world criminal cases. Consider adding Philippine criminal case studies to Criminal Procedure module.
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-2 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-800">
-                      Generate Cases
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <div>
-                    <h4 className="font-medium text-green-900 dark:text-green-100">Video Lectures Performing Well</h4>
-                    <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                      Students engage 40% more with video content. Consider recording lectures for Elements of Crime module.
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-2 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-800">
-                      Schedule Recording
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <div>
-                    <h4 className="font-medium text-amber-900 dark:text-amber-100">Review Prerequisites</h4>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      Criminal Procedure module has 35% completion. Students may need Constitutional Law review first.
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-2 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-800">
-                      Add Prerequisites
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-gray-900 dark:text-white">Quick Actions</CardTitle>
-          <CardDescription>Common course management tasks</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Button variant="outline" className="h-16 flex-col" disabled>
-              <Brain className="h-5 w-5 mb-1 text-emerald-500" />
-              <span className="text-xs">Student AI Quizzes</span>
-            </Button>
-            <Button variant="outline" className="h-16 flex-col">
-              <FileText className="h-5 w-5 mb-1" />
-              <span className="text-xs">Upload Materials</span>
-            </Button>
-            <Button variant="outline" className="h-16 flex-col">
-              <Users className="h-5 w-5 mb-1" />
-              <span className="text-xs">Student Progress</span>
-            </Button>
-            <Button variant="outline" className="h-16 flex-col">
-              <BarChart3 className="h-5 w-5 mb-1" />
-              <span className="text-xs">Course Analytics</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Module Details Modal */}
       {showModuleModal && selectedModuleForView && (
