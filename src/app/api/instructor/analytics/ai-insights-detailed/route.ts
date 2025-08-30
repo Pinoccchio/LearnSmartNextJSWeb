@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { teachingAnalyticsAI } from '@/lib/teaching-analytics-ai'
+import type { CourseAnalyticsData, StudentPerformanceData } from '@/lib/teaching-analytics-ai'
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,469 +48,476 @@ export async function GET(request: NextRequest) {
         startDate.setMonth(now.getMonth() - 1)
     }
 
-    // Get instructor's courses and enrolled students
-    const { data: instructorCourses } = await supabase
+    // Get instructor's courses
+    const { data: instructorCourses, error: coursesError } = await supabase
       .from('courses')
-      .select('id, title')
+      .select('id, title, description, created_at')
       .eq('instructor_id', userId)
 
-    if (!instructorCourses || instructorCourses.length === 0) {
+    if (coursesError || !instructorCourses || instructorCourses.length === 0) {
+      console.log('⚠️ [AI INSIGHTS] No courses found for instructor')
       return NextResponse.json({
         success: true,
         data: {
           teachingRecommendations: [],
           studentInterventions: [],
-          learningPatternInsights: [],
           performanceAlerts: [],
-          contentOptimizationSuggestions: [],
-          studyPlanRecommendations: [],
-          classPerformanceInsights: []
+          classPerformanceInsights: [],
+          aiStatus: 'no_courses',
+          message: 'No courses found for analysis'
         }
       })
     }
 
     const courseIds = instructorCourses.map(c => c.id)
-    
-    // Get enrolled students
+    console.log('🔍 [AI INSIGHTS] Analyzing', courseIds.length, 'courses')
+
+    // Get enrolled students with simplified query
     const { data: enrolledStudents, error: enrollmentError } = await supabase
-      .rpc('get_instructor_enrolled_students', {
-        p_instructor_id: userId
-      })
+      .from('course_enrollments')
+      .select(`
+        user_id,
+        course_id,
+        enrolled_at,
+        status,
+        users!inner(id, name, email, role)
+      `)
+      .in('course_id', courseIds)
+      .eq('status', 'active')
+      .eq('users.role', 'student')
 
     if (enrollmentError) {
       console.error('❌ Error getting enrolled students:', enrollmentError)
       return NextResponse.json({ error: 'Failed to fetch students' }, { status: 500 })
     }
 
-    const studentIds = enrolledStudents?.map(s => s.student_id) || []
-
+    const studentIds = enrolledStudents?.map(e => e.user_id) || []
+    
     if (studentIds.length === 0) {
+      console.log('⚠️ [AI INSIGHTS] No enrolled students found')
       return NextResponse.json({
         success: true,
         data: {
           teachingRecommendations: [],
           studentInterventions: [],
-          learningPatternInsights: [],
           performanceAlerts: [],
-          contentOptimizationSuggestions: [],
-          studyPlanRecommendations: [],
-          classPerformanceInsights: []
+          classPerformanceInsights: [],
+          aiStatus: 'no_students',
+          message: 'No enrolled students found for analysis'
         }
       })
     }
 
-    // Get comprehensive AI analytics data
-    const { data: analyticsData } = await supabase
-      .from('study_session_analytics')
-      .select(`
-        user_id,
-        session_type,
-        analyzed_at,
-        performance_metrics,
-        learning_patterns,
-        behavior_analysis,
-        cognitive_analysis,
-        recommendations,
-        insights,
-        suggested_study_plan,
-        confidence_score,
-        data_completeness_score
-      `)
-      .in('user_id', studentIds)
-      .gte('created_at', startDate.toISOString())
-      .order('analyzed_at', { ascending: false })
+    console.log('📊 [AI INSIGHTS] Found', studentIds.length, 'enrolled students')
 
-    // Get student information for context
-    const { data: studentsInfo } = await supabase
-      .from('users')
-      .select('id, name, email')
-      .in('id', studentIds)
-
-    // Get module progress for additional context
-    const { data: moduleProgressData } = await supabase
-      .from('user_module_progress')
-      .select(`
-        user_id,
-        module_id,
-        best_score,
-        status,
-        needs_remedial,
-        modules!inner (
-          title,
-          course_id
-        )
-      `)
-      .in('user_id', studentIds)
-      .in('modules.course_id', courseIds)
-
-    // Get Feynman feedback for detailed insights
-    const { data: feynmanFeedback } = await supabase
-      .from('feynman_feedback')
-      .select(`
-        feedback_type,
-        feedback_text,
-        suggested_improvement,
-        severity,
-        priority,
-        feynman_explanations!inner(
-          feynman_sessions!inner(
-            user_id,
-            created_at
-          )
-        )
-      `)
-      .gte('feynman_explanations.feynman_sessions.created_at', startDate.toISOString())
-
-    // Create student lookup map
-    const studentMap = (studentsInfo || []).reduce((acc, student) => {
-      acc[student.id] = student
-      return acc
-    }, {})
-
-    // Process AI analytics data
-    if (!analyticsData || analyticsData.length === 0) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          teachingRecommendations: [],
-          studentInterventions: [],
-          learningPatternInsights: [],
-          performanceAlerts: [],
-          contentOptimizationSuggestions: [],
-          studyPlanRecommendations: [],
-          classPerformanceInsights: []
-        }
-      })
-    }
-
-    // Build Teaching Recommendations
-    const teachingRecommendations = []
-    const recommendationCounts = {}
+    // Collect essential data for AI analysis in parallel
+    console.log('📊 [AI INSIGHTS] Collecting analytics data...')
     
-    analyticsData.forEach(session => {
-      if (session.recommendations && Array.isArray(session.recommendations)) {
-        session.recommendations.forEach(rec => {
-          const key = `${rec.type}-${rec.title}`
-          if (!recommendationCounts[key]) {
-            recommendationCounts[key] = {
-              type: rec.type,
-              title: rec.title,
-              description: rec.description,
-              actionableAdvice: rec.actionable_advice || rec.actionableAdvice,
-              priority: rec.priority || 1,
-              affectedStudents: new Set(),
-              frequency: 0,
-              avgConfidence: 0,
-              totalConfidence: 0
-            }
-          }
+    const [
+      studyAnalyticsResult,
+      moduleProgressResult, 
+      studySessionsResults
+    ] = await Promise.all([
+      // Study session analytics
+      supabase
+        .from('study_session_analytics')
+        .select('user_id, session_type, performance_metrics, learning_patterns, recommendations, insights')
+        .in('user_id', studentIds)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false }),
+      
+      // Module progress
+      supabase
+        .from('user_module_progress')
+        .select(`
+          user_id,
+          module_id,
+          best_score,
+          latest_score,
+          status,
+          needs_remedial,
+          passed,
+          modules!inner(id, title, course_id)
+        `)
+        .in('user_id', studentIds)
+        .in('modules.course_id', courseIds),
+        
+      // Recent study sessions from all techniques
+      Promise.all([
+        supabase.from('active_recall_sessions').select('user_id, status, created_at').in('user_id', studentIds).gte('created_at', startDate.toISOString()),
+        supabase.from('pomodoro_sessions').select('user_id, status, created_at').in('user_id', studentIds).gte('created_at', startDate.toISOString()),
+        supabase.from('feynman_sessions').select('user_id, status, created_at').in('user_id', studentIds).gte('created_at', startDate.toISOString()),
+        supabase.from('retrieval_practice_sessions').select('user_id, status, created_at').in('user_id', studentIds).gte('created_at', startDate.toISOString())
+      ])
+    ])
+
+    console.log('📊 [AI INSIGHTS] Data collection complete')
+    
+    // Check for data availability
+    const hasAnalytics = studyAnalyticsResult.data && studyAnalyticsResult.data.length > 0
+    const hasModuleProgress = moduleProgressResult.data && moduleProgressResult.data.length > 0
+    const hasSessions = studySessionsResults.some(result => result.data && result.data.length > 0)
+    
+    if (!hasAnalytics && !hasModuleProgress && !hasSessions) {
+      console.log('⚠️ [AI INSIGHTS] Insufficient data for analysis')
+      return NextResponse.json({
+        success: true,
+        data: {
+          teachingRecommendations: [],
+          studentInterventions: [],
+          performanceAlerts: [],
+          classPerformanceInsights: [],
+          aiStatus: 'no_data',
+          message: 'No student activity data available yet. Students need to start using study techniques.'
+        }
+      })
+    }
+
+    // Prepare data for AI analysis
+    console.log('🤖 [AI INSIGHTS] Preparing data for AI analysis...')
+    
+    // Process course analytics data
+    const courseAnalyticsData: CourseAnalyticsData[] = instructorCourses.map(course => {
+      const courseEnrollments = enrolledStudents?.filter(e => e.course_id === course.id) || []
+      const courseStudentIds = courseEnrollments.map(e => e.user_id)
+      
+      // Calculate study technique data
+      const allSessions = studySessionsResults.flatMap((result, index) => {
+        const techniqueNames = ['active_recall', 'pomodoro', 'feynman', 'retrieval_practice']
+        return (result.data || []).map(session => ({
+          ...session,
+          session_type: techniqueNames[index]
+        }))
+      })
+      
+      const courseSessions = allSessions.filter(s => courseStudentIds.includes(s.user_id))
+      const courseAnalytics = studyAnalyticsResult.data?.filter(a => courseStudentIds.includes(a.user_id)) || []
+      const courseModuleProgress = moduleProgressResult.data?.filter(mp => 
+        courseStudentIds.includes(mp.user_id) && mp.modules?.course_id === course.id
+      ) || []
+      
+      // Calculate technique performance
+      const techniqueStats = ['active_recall', 'pomodoro', 'feynman', 'retrieval_practice'].map(technique => {
+        const sessions = courseSessions.filter(s => s.session_type === technique)
+        const analytics = courseAnalytics.filter(a => a.session_type === technique)
+        
+        const effectiveness = analytics.length > 0 ? 
+          analytics.reduce((sum, a) => {
+            const performance = a.performance_metrics || {}
+            return sum + (performance.improvement_percentage || performance.overall_accuracy || 50)
+          }, 0) / analytics.length : 0
           
-          recommendationCounts[key].affectedStudents.add(session.user_id)
-          recommendationCounts[key].frequency++
-          recommendationCounts[key].totalConfidence += (rec.confidence_score || 0.7)
-        })
-      }
-    })
+        const adoptionRate = courseStudentIds.length > 0 ? 
+          (new Set(sessions.map(s => s.user_id)).size / courseStudentIds.length) * 100 : 0
 
-    Object.values(recommendationCounts).forEach((rec: any) => {
-      rec.avgConfidence = rec.frequency > 0 ? rec.totalConfidence / rec.frequency : 0
-      rec.affectedStudentsCount = rec.affectedStudents.size
-      rec.affectedStudents = Array.from(rec.affectedStudents).map(id => studentMap[id]?.name).filter(Boolean)
-      
-      teachingRecommendations.push({
-        id: `rec_${teachingRecommendations.length + 1}`,
-        type: rec.type,
-        title: rec.title,
-        description: rec.description,
-        actionableAdvice: rec.actionableAdvice,
-        priority: rec.priority,
-        frequency: rec.frequency,
-        affectedStudentsCount: rec.affectedStudentsCount,
-        affectedStudents: rec.affectedStudents.slice(0, 3), // Top 3 for display
-        confidence: Math.round(rec.avgConfidence * 100),
-        impact: rec.affectedStudentsCount >= 3 ? 'high' : 
-                rec.affectedStudentsCount === 2 ? 'medium' : 'low'
-      })
-    })
-
-    // Sort by priority and frequency
-    teachingRecommendations.sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority - b.priority
-      return b.frequency - a.frequency
-    })
-
-    // Build Student Interventions
-    const studentInterventions = []
-    const studentAnalytics = {}
-    
-    analyticsData.forEach(session => {
-      if (!studentAnalytics[session.user_id]) {
-        studentAnalytics[session.user_id] = {
-          sessions: [],
-          totalRecommendations: 0,
-          highPriorityIssues: 0,
-          criticalIssues: 0,
-          improvementTrend: 0
+        return {
+          technique: technique.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          totalSessions: sessions.length,
+          averageEffectiveness: Math.round(effectiveness),
+          adoptionRate: Math.round(adoptionRate)
         }
-      }
-      studentAnalytics[session.user_id].sessions.push(session)
-      
-      if (session.recommendations) {
-        studentAnalytics[session.user_id].totalRecommendations += session.recommendations.length
-        session.recommendations.forEach(rec => {
-          if (rec.priority <= 2) studentAnalytics[session.user_id].highPriorityIssues++
-          if (rec.priority === 1) studentAnalytics[session.user_id].criticalIssues++
-        })
-      }
-    })
+      })
 
-    Object.entries(studentAnalytics).forEach(([userId, data]: [string, any]) => {
-      const student = studentMap[userId]
-      if (!student) return
-
-      // Calculate improvement trend from performance metrics
-      const performances = data.sessions
-        .map(s => s.performance_metrics?.improvement_percentage || 0)
-        .filter(p => p !== 0)
-      
-      if (performances.length >= 2) {
-        data.improvementTrend = performances[performances.length - 1] - performances[0]
-      }
-
-      // Determine intervention level
-      let interventionLevel = 'none'
-      let interventionReason = []
-      
-      if (data.criticalIssues > 0) {
-        interventionLevel = 'urgent'
-        interventionReason.push(`${data.criticalIssues} critical issues identified`)
-      } else if (data.highPriorityIssues >= 3) {
-        interventionLevel = 'high'
-        interventionReason.push(`${data.highPriorityIssues} high priority issues`)
-      } else if (data.improvementTrend < -20) {
-        interventionLevel = 'medium'
-        interventionReason.push('declining performance trend')
-      }
-
-      if (interventionLevel !== 'none') {
-        // Get latest recommendations for this student
-        const latestSession = data.sessions
-          .sort((a, b) => new Date(b.analyzed_at).getTime() - new Date(a.analyzed_at).getTime())[0]
-
-        studentInterventions.push({
-          studentId: userId,
-          studentName: student.name,
-          studentEmail: student.email,
-          interventionLevel,
-          reasons: interventionReason,
-          recommendedActions: (latestSession.recommendations || [])
-            .filter(r => r.priority <= 2)
-            .slice(0, 3)
-            .map(r => r.actionable_advice || r.actionableAdvice),
-          lastAnalyzed: latestSession.analyzed_at,
-          sessionsAnalyzed: data.sessions.length,
-          improvementTrend: Math.round(data.improvementTrend)
-        })
-      }
-    })
-
-    // Sort by intervention level priority
-    const levelPriority = { urgent: 0, high: 1, medium: 2 }
-    studentInterventions.sort((a, b) => levelPriority[a.interventionLevel] - levelPriority[b.interventionLevel])
-
-    // Build Learning Pattern Insights
-    const learningPatternInsights = []
-    const patternCounts = {}
-    
-    analyticsData.forEach(session => {
-      if (session.learning_patterns?.pattern_type) {
-        const pattern = session.learning_patterns.pattern_type
-        if (!patternCounts[pattern]) {
-          patternCounts[pattern] = {
-            count: 0,
-            students: new Set(),
-            avgVelocity: 0,
-            totalVelocity: 0,
-            sessions: []
-          }
+      // Calculate module performance
+      const moduleMap = new Map()
+      courseModuleProgress.forEach(mp => {
+        const moduleId = mp.module_id
+        const moduleName = mp.modules?.title || 'Unknown Module'
+        
+        if (!moduleMap.has(moduleId)) {
+          moduleMap.set(moduleId, {
+            moduleId,
+            moduleName,
+            difficulty: 'medium',
+            students: [],
+            scores: []
+          })
         }
         
-        patternCounts[pattern].count++
-        patternCounts[pattern].students.add(session.user_id)
-        patternCounts[pattern].sessions.push(session)
-        
-        if (session.learning_patterns.learning_velocity) {
-          patternCounts[pattern].totalVelocity += session.learning_patterns.learning_velocity
+        const moduleData = moduleMap.get(moduleId)
+        moduleData.students.push(mp)
+        const score = parseFloat(mp.best_score || mp.latest_score || '0')
+        if (score > 0) moduleData.scores.push(score)
+      })
+
+      const modulePerformance = Array.from(moduleMap.values()).map(module => {
+        const completedCount = module.students.filter(s => 
+          s.status === 'completed' || s.passed === true
+        ).length
+        const completionRate = module.students.length > 0 ? (completedCount / module.students.length) * 100 : 0
+        const averageScore = module.scores.length > 0 ?
+          module.scores.reduce((sum, score) => sum + score, 0) / module.scores.length : 0
+        const strugglingCount = module.students.filter(s => 
+          parseFloat(s.best_score || s.latest_score || '0') < 60 || s.needs_remedial
+        ).length
+
+        return {
+          moduleId: module.moduleId,
+          moduleName: module.moduleName,
+          difficulty: module.difficulty,
+          completionRate: Math.round(completionRate),
+          averageScore: Math.round(averageScore),
+          strugglingStudents: strugglingCount
         }
+      })
+
+      // Calculate overall metrics
+      const activeStudents = new Set(courseSessions.map(s => s.user_id)).size
+      const averageProgress = modulePerformance.length > 0 ?
+        modulePerformance.reduce((sum, m) => sum + m.completionRate, 0) / modulePerformance.length : 0
+      const moduleScores = modulePerformance.map(m => m.averageScore).filter(score => score > 0)
+      const averageScore = moduleScores.length > 0 ?
+        moduleScores.reduce((sum, score) => sum + score, 0) / moduleScores.length : 0
+
+      return {
+        courseId: course.id,
+        courseName: course.title,
+        instructorId: userProfile.id,
+        totalStudents: courseEnrollments.length,
+        activeStudents,
+        averageProgress: Math.round(averageProgress),
+        averageScore: Math.round(averageScore),
+        studySessionsData: techniqueStats,
+        modulePerformance,
+        timeRange,
+        peakStudyHours: [] // Simplified for now
       }
     })
 
-    Object.entries(patternCounts).forEach(([pattern, data]: [string, any]) => {
-      data.avgVelocity = data.count > 0 ? data.totalVelocity / data.count : 0
-      
-      learningPatternInsights.push({
-        pattern,
-        frequency: data.count,
-        studentsAffected: data.students.size,
-        averageVelocity: Math.round(data.avgVelocity * 100) / 100,
-        description: getPatternDescription(pattern),
-        teachingSuggestion: getTeachingSuggestionForPattern(pattern, data.avgVelocity),
-        impact: data.students.size >= 3 ? 'high' : data.students.size === 2 ? 'medium' : 'low'
-      })
+    // Prepare student performance data for interventions
+    const studentPerformanceData: StudentPerformanceData[] = (enrolledStudents || []).map(enrollment => {
+      const userId = enrollment.user_id
+      const userName = enrollment.users?.name || 'Unknown Student'
+      const courseId = enrollment.course_id
+      const course = instructorCourses.find(c => c.id === courseId)
+      const courseName = course?.title || 'Unknown Course'
+
+      const studentModuleProgress = moduleProgressResult.data?.filter(mp => 
+        mp.user_id === userId && mp.modules?.course_id === courseId
+      ) || []
+
+      const moduleProgressData = studentModuleProgress.map(mp => ({
+        moduleId: mp.module_id,
+        moduleName: mp.modules?.title || 'Unknown Module',
+        completionPercentage: mp.status === 'completed' ? 100 : 
+                             mp.passed ? 90 : 
+                             parseFloat(mp.best_score || '0') > 70 ? 80 : 50,
+        averageScore: parseFloat(mp.best_score || mp.latest_score || '0'),
+        lastActivity: mp.updated_at || mp.created_at || new Date().toISOString()
+      }))
+
+      const overallProgress = moduleProgressData.length > 0 ?
+        moduleProgressData.reduce((sum, m) => sum + m.completionPercentage, 0) / moduleProgressData.length : 0
+
+      const moduleScores = moduleProgressData.map(m => m.averageScore).filter(score => score > 0)
+      const avgModuleScore = moduleScores.length > 0 ?
+        moduleScores.reduce((sum, score) => sum + score, 0) / moduleScores.length : 0
+
+      // Determine risk level
+      let riskLevel: 'low' | 'medium' | 'high' = 'low'
+      if (overallProgress < 30 || avgModuleScore < 50) {
+        riskLevel = 'high'
+      } else if (overallProgress < 60 || avgModuleScore < 70) {
+        riskLevel = 'medium'
+      }
+
+      return {
+        userId,
+        userName,
+        courseId,
+        courseName,
+        moduleProgress: moduleProgressData,
+        studyTechniques: [], // Simplified for now
+        overallProgress: Math.round(overallProgress),
+        riskLevel,
+        engagementLevel: Math.max(0, 100 - (overallProgress < 50 ? 30 : 0)),
+        lastActiveDate: enrollment.enrolled_at
+      }
     })
 
-    // Build Performance Alerts
+    // Generate AI insights using the AI service
+    console.log('🤖 [AI INSIGHTS] Generating AI-powered insights...')
+    
+    const allInsights = []
+    const allRecommendations = []
     const performanceAlerts = []
-    
-    // Analyze module performance for alerts
-    const modulePerformanceMap = {}
-    moduleProgressData?.forEach(mp => {
-      const moduleId = mp.module_id
-      if (!modulePerformanceMap[moduleId]) {
-        modulePerformanceMap[moduleId] = {
-          title: mp.modules.title,
-          scores: [],
-          needsRemedial: 0,
-          failing: 0,
-          totalStudents: 0
+    let aiAnalysisSuccessful = false
+
+    try {
+      // Generate insights for each course with data
+      for (const courseData of courseAnalyticsData) {
+        const hasStudentData = courseData.totalStudents > 0
+        const hasSessionData = courseData.studySessionsData.some(technique => technique.totalSessions > 0)
+        
+        if (!hasStudentData) continue
+        
+        console.log(`🤖 [AI INSIGHTS] Analyzing course: ${courseData.courseName}`)
+        
+        try {
+          // Generate teaching insights using AI
+          const teachingInsights = await teachingAnalyticsAI.generateTeachingInsights(courseData)
+          if (teachingInsights && teachingInsights.length > 0) {
+            allInsights.push(...teachingInsights)
+            aiAnalysisSuccessful = true
+          }
+
+          // Generate technique analysis
+          const techniqueAnalysis = await teachingAnalyticsAI.analyzeTechniqueEffectiveness(courseData)
+          if (techniqueAnalysis.insights && techniqueAnalysis.insights.length > 0) {
+            allInsights.push(...techniqueAnalysis.insights)
+          }
+          if (techniqueAnalysis.recommendations && techniqueAnalysis.recommendations.length > 0) {
+            allRecommendations.push(...techniqueAnalysis.recommendations)
+          }
+
+        } catch (error) {
+          console.error('❌ [AI INSIGHTS] Error generating insights for course:', courseData.courseName, error)
+          // Continue with other courses
+        }
+
+        // Generate performance alerts based on module data
+        courseData.modulePerformance.forEach(module => {
+          if (module.averageScore > 0 && module.averageScore < 60) {
+            performanceAlerts.push({
+              type: 'warning',
+              title: `Low Performance in ${module.moduleName}`,
+              description: `Average score of ${module.averageScore}% indicates students are struggling`,
+              moduleId: module.moduleId,
+              moduleTitle: module.moduleName,
+              metric: 'average_score',
+              value: module.averageScore,
+              affectedStudents: module.strugglingStudents,
+              severity: module.averageScore < 40 ? 'high' : 'medium'
+            })
+          }
+
+          if (module.strugglingStudents >= Math.ceil(courseData.totalStudents * 0.3)) {
+            performanceAlerts.push({
+              type: 'critical',
+              title: `Many Students Struggling with ${module.moduleName}`,
+              description: `${module.strugglingStudents} out of ${courseData.totalStudents} students need help`,
+              moduleId: module.moduleId,
+              moduleTitle: module.moduleName,
+              metric: 'struggling_students',
+              value: module.strugglingStudents,
+              affectedStudents: module.strugglingStudents,
+              severity: 'high'
+            })
+          }
+        })
+      }
+
+      // Generate student interventions for at-risk students
+      const atRiskStudents = studentPerformanceData.filter(s => s.riskLevel === 'high' || s.riskLevel === 'medium')
+      
+      if (atRiskStudents.length > 0) {
+        console.log(`🚨 [AI INSIGHTS] Generating interventions for ${atRiskStudents.length} at-risk students`)
+        try {
+          const interventions = await teachingAnalyticsAI.generateStudentInterventions(atRiskStudents)
+          if (interventions && interventions.length > 0) {
+            allRecommendations.push(...interventions)
+            aiAnalysisSuccessful = true
+          }
+        } catch (error) {
+          console.error('❌ [AI INSIGHTS] Error generating interventions:', error)
         }
       }
-      
-      const moduleData = modulePerformanceMap[moduleId]
-      moduleData.totalStudents++
-      
-      const score = parseFloat(mp.best_score || '0')
-      if (score > 0) {
-        moduleData.scores.push(score)
-        if (score < 60) moduleData.failing++
-        else if (score < 70) moduleData.needsRemedial++
-      }
-      
-      if (mp.needs_remedial) moduleData.needsRemedial++
+
+    } catch (error) {
+      console.error('❌ [AI INSIGHTS] Error in AI analysis:', error)
+    }
+
+    // Sort results by priority
+    allInsights.sort((a, b) => (a.priority || 3) - (b.priority || 3))
+    allRecommendations.sort((a, b) => (a.priority || 3) - (b.priority || 3))
+    performanceAlerts.sort((a, b) => {
+      const severityOrder = { high: 0, medium: 1, low: 2 }
+      return severityOrder[a.severity] - severityOrder[b.severity]
     })
 
-    Object.entries(modulePerformanceMap).forEach(([moduleId, data]: [string, any]) => {
-      const avgScore = data.scores.length > 0 ? data.scores.reduce((a, b) => a + b, 0) / data.scores.length : 0
-      const failureRate = (data.failing / data.totalStudents) * 100
-      const remedialRate = (data.needsRemedial / data.totalStudents) * 100
-      
-      if (failureRate >= 30) {
-        performanceAlerts.push({
-          type: 'critical',
-          title: `High Failure Rate in ${data.title}`,
-          description: `${Math.round(failureRate)}% of students are failing this module`,
-          moduleId,
-          moduleTitle: data.title,
-          metric: 'failure_rate',
-          value: Math.round(failureRate),
-          affectedStudents: data.failing,
-          totalStudents: data.totalStudents,
-          severity: 'high'
-        })
-      } else if (remedialRate >= 40) {
-        performanceAlerts.push({
-          type: 'warning',
-          title: `Many Students Need Remedial Help in ${data.title}`,
-          description: `${Math.round(remedialRate)}% of students need additional support`,
-          moduleId,
-          moduleTitle: data.title,
-          metric: 'remedial_rate',
-          value: Math.round(remedialRate),
-          affectedStudents: data.needsRemedial,
-          totalStudents: data.totalStudents,
-          severity: 'medium'
-        })
-      } else if (avgScore < 70) {
-        performanceAlerts.push({
-          type: 'info',
-          title: `Below Average Performance in ${data.title}`,
-          description: `Average score of ${Math.round(avgScore)}% indicates room for improvement`,
-          moduleId,
-          moduleTitle: data.title,
-          metric: 'average_score',
-          value: Math.round(avgScore),
-          affectedStudents: data.totalStudents,
-          totalStudents: data.totalStudents,
-          severity: 'low'
-        })
-      }
-    })
-
-    // Build Content Optimization Suggestions from Feynman feedback
-    const contentOptimizationSuggestions = []
-    const feedbackAnalysis = {}
-    
-    feynmanFeedback?.forEach(feedback => {
-      const type = feedback.feedback_type
-      if (!feedbackAnalysis[type]) {
-        feedbackAnalysis[type] = {
-          count: 0,
-          highPriority: 0,
-          suggestions: new Set(),
-          severityBreakdown: { low: 0, medium: 0, high: 0, critical: 0 }
-        }
-      }
-      
-      feedbackAnalysis[type].count++
-      if (feedback.priority <= 2) feedbackAnalysis[type].highPriority++
-      if (feedback.suggested_improvement) {
-        feedbackAnalysis[type].suggestions.add(feedback.suggested_improvement)
-      }
-      feedbackAnalysis[type].severityBreakdown[feedback.severity || 'medium']++
-    })
-
-    Object.entries(feedbackAnalysis).forEach(([type, data]: [string, any]) => {
-      if (data.count >= 2) { // Only include if seen in multiple instances
-        contentOptimizationSuggestions.push({
-          area: type,
-          frequency: data.count,
-          priority: data.highPriority >= data.count * 0.5 ? 'high' : 'medium',
-          suggestions: Array.from(data.suggestions).slice(0, 3),
-          description: getFeedbackDescription(type),
-          impact: data.count >= 5 ? 'high' : data.count >= 3 ? 'medium' : 'low',
-          severityBreakdown: data.severityBreakdown
-        })
-      }
-    })
-
-    // Build Class Performance Insights
+    // Build class performance insights from the collected data
     const classPerformanceInsights = []
     
-    // Overall class performance insight
-    const overallPerformances = analyticsData
-      .map(s => s.performance_metrics?.improvement_percentage || 0)
-      .filter(p => p !== 0)
+    // Overall class engagement insight
+    const totalStudents = studentPerformanceData.length
+    const activeStudentsCount = courseAnalyticsData.reduce((sum, course) => sum + course.activeStudents, 0)
     
-    if (overallPerformances.length > 0) {
-      const avgImprovement = overallPerformances.reduce((a, b) => a + b, 0) / overallPerformances.length
-      const positiveImprovements = overallPerformances.filter(p => p > 0).length
-      const improvementRate = (positiveImprovements / overallPerformances.length) * 100
+    if (totalStudents > 0) {
+      const overallEngagement = Math.round((activeStudentsCount / totalStudents) * 100)
+      const atRiskCount = studentPerformanceData.filter(s => s.riskLevel === 'high').length
+      const mediumRiskCount = studentPerformanceData.filter(s => s.riskLevel === 'medium').length
       
       classPerformanceInsights.push({
-        type: 'overall_performance',
-        title: 'Class Learning Progress',
-        insight: `${Math.round(improvementRate)}% of students show positive learning improvements with an average improvement of ${Math.round(avgImprovement)}%`,
+        type: 'engagement_overview',
+        title: 'Class Engagement Overview',
+        insight: `${overallEngagement}% of students are actively engaged. ${atRiskCount} students need immediate attention, ${mediumRiskCount} need monitoring.`,
         metrics: {
-          averageImprovement: Math.round(avgImprovement),
-          improvementRate: Math.round(improvementRate),
-          studentsAnalyzed: analyticsData.filter((v, i, a) => a.findIndex(t => t.user_id === v.user_id) === i).length
+          totalStudents,
+          activeStudents: activeStudentsCount,
+          engagementRate: overallEngagement,
+          atRiskStudents: atRiskCount,
+          mediumRiskStudents: mediumRiskCount
         },
-        trend: avgImprovement > 10 ? 'positive' : avgImprovement < -10 ? 'concerning' : 'stable'
+        trend: overallEngagement >= 70 ? 'positive' : overallEngagement >= 50 ? 'stable' : 'concerning'
       })
     }
 
-    console.log('📊 [AI INSIGHTS] Completed AI insights analysis')
+    // Course performance insight
+    if (courseAnalyticsData.length > 0) {
+      const avgCourseScore = Math.round(
+        courseAnalyticsData.reduce((sum, course) => sum + course.averageScore, 0) / courseAnalyticsData.length
+      )
+      
+      classPerformanceInsights.push({
+        type: 'academic_performance',
+        title: 'Academic Performance Summary',
+        insight: `Average performance across all courses is ${avgCourseScore}%. ${performanceAlerts.length} modules require attention.`,
+        metrics: {
+          averageScore: avgCourseScore,
+          coursesAnalyzed: courseAnalyticsData.length,
+          alertsGenerated: performanceAlerts.length
+        },
+        trend: avgCourseScore >= 75 ? 'positive' : avgCourseScore >= 60 ? 'stable' : 'concerning'
+      })
+    }
+
+    // Determine AI status and message
+    let aiStatus = 'success'
+    let message = ''
+    
+    if (!aiAnalysisSuccessful && allInsights.length === 0 && allRecommendations.length === 0) {
+      aiStatus = 'fallback'
+      message = 'AI analysis unavailable, showing basic insights. More student activity data needed for comprehensive AI recommendations.'
+    } else if (allInsights.length === 0 && allRecommendations.length === 0) {
+      aiStatus = 'limited'
+      message = 'Limited insights available. Encourage more student activity for better AI analysis.'
+    } else {
+      message = `Generated ${allInsights.length} insights and ${allRecommendations.length} recommendations`
+    }
+
+    console.log(`✅ [AI INSIGHTS] Analysis complete: ${allInsights.length} insights, ${allRecommendations.length} recommendations, ${performanceAlerts.length} alerts`)
 
     return NextResponse.json({
       success: true,
       data: {
-        teachingRecommendations: teachingRecommendations.slice(0, 10),
-        studentInterventions: studentInterventions.slice(0, 15),
-        learningPatternInsights: learningPatternInsights.slice(0, 8),
+        teachingRecommendations: allInsights.slice(0, 10), // Map insights to recommendations format
+        studentInterventions: allRecommendations.filter(r => r.type === 'intervention').slice(0, 8),
         performanceAlerts: performanceAlerts.slice(0, 10),
-        contentOptimizationSuggestions: contentOptimizationSuggestions.slice(0, 8),
-        studyPlanRecommendations: [], // Can be expanded with more specific logic
-        classPerformanceInsights
+        classPerformanceInsights,
+        // Additional AI-specific data
+        aiInsights: allInsights.slice(0, 15),
+        aiRecommendations: allRecommendations.slice(0, 12),
+        learningPatternInsights: [], // Can be expanded later
+        contentOptimizationSuggestions: [], // Can be expanded later
+        studyPlanRecommendations: allRecommendations.filter(r => r.type === 'content_creation' || r.type === 'technique_recommendation').slice(0, 5),
+        // Metadata
+        aiStatus,
+        message,
+        coursesAnalyzed: courseAnalyticsData.length,
+        studentsAnalyzed: studentPerformanceData.length,
+        atRiskStudents: studentPerformanceData.filter(s => s.riskLevel === 'high').length,
+        timeRange,
+        generatedAt: new Date().toISOString()
       }
     })
 
@@ -517,41 +526,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Internal server error',
-        details: error.message 
+        data: {
+          teachingRecommendations: [],
+          studentInterventions: [],
+          performanceAlerts: [],
+          classPerformanceInsights: [],
+          aiStatus: 'error',
+          message: 'AI insights service encountered an error. Please try again later.',
+          coursesAnalyzed: 0,
+          studentsAnalyzed: 0,
+          atRiskStudents: 0
+        }
       },
       { status: 500 }
     )
   }
-}
-
-// Helper functions
-function getPatternDescription(pattern: string): string {
-  const descriptions = {
-    'strugglingConcepts': 'Students are having difficulty with specific concepts and may need additional support',
-    'steadyProgression': 'Students are making consistent progress through the material',
-    'rapidLearning': 'Students are learning quickly and may benefit from advanced content',
-    'inconsistentPerformance': 'Student performance varies significantly between sessions'
-  }
-  return descriptions[pattern] || 'Specific learning pattern identified requiring attention'
-}
-
-function getTeachingSuggestionForPattern(pattern: string, velocity: number): string {
-  const suggestions = {
-    'strugglingConcepts': 'Consider providing additional scaffolding, breaking down complex concepts, or implementing peer tutoring',
-    'steadyProgression': 'Continue current teaching methods while monitoring for any changes in pace',
-    'rapidLearning': 'Provide enrichment activities or accelerated content to maintain engagement',
-    'inconsistentPerformance': 'Investigate external factors and consider more frequent check-ins with affected students'
-  }
-  return suggestions[pattern] || 'Monitor closely and adjust teaching strategies as needed'
-}
-
-function getFeedbackDescription(type: string): string {
-  const descriptions = {
-    'clarity': 'Students need clearer explanations and simpler language in their learning materials',
-    'completeness': 'Learning materials may need more comprehensive coverage of topics',
-    'accuracy': 'Focus on fact-checking and ensuring accurate information in explanations',
-    'simplification': 'Content should be presented in more digestible, simplified formats',
-    'examples': 'More practical examples and real-world applications needed'
-  }
-  return descriptions[type] || 'Improvement needed in this area of content delivery'
 }

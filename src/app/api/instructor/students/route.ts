@@ -132,6 +132,12 @@ export async function GET(request: NextRequest) {
         weakAreas.push('Advanced Legal Concepts')
       }
       
+      // Create deterministic calculations based on student ID to ensure consistency
+      const studentHash = student.student_id.slice(-2) // Last 2 chars of UUID
+      const variance = parseInt(studentHash, 16) % 15 // 0-14 range for score variance
+      const sessionVariance = parseInt(studentHash, 16) % 5 // 0-4 range for session variance
+      const streakVariance = parseInt(studentHash, 16) % 7 // 0-6 range for streak variance
+      
       return {
         id: student.student_id,
         name: student.student_name,
@@ -139,17 +145,17 @@ export async function GET(request: NextRequest) {
         courseId: student.course_id,
         courseTitle: student.course_title,
         progress: Math.round(progress),
-        avgScore: Math.round(progress * 0.85 + Math.random() * 15), // More realistic score with some variance
+        avgScore: Math.max(0, Math.min(100, Math.round(progress * 0.85 + variance))), // Deterministic score calculation
         riskLevel,
         lastActive,
         enrollmentStatus: student.enrollment_status,
         enrolledAt: student.enrolled_at,
         strongAreas,
         weakAreas,
-        studySessions: Math.floor(progress / 3.5) + Math.floor(Math.random() * 5) || 1, // More realistic session count
-        streak: riskLevel === 'Low' ? Math.floor(progress / 8) + Math.floor(Math.random() * 7) : 
-                riskLevel === 'Medium' ? Math.floor(progress / 15) + Math.floor(Math.random() * 3) : 
-                Math.floor(Math.random() * 2) // High risk students have very low streaks
+        studySessions: Math.floor(progress / 3.5) + sessionVariance || 1, // Deterministic session count
+        streak: riskLevel === 'Low' ? Math.floor(progress / 8) + streakVariance : 
+                riskLevel === 'Medium' ? Math.floor(progress / 15) + Math.floor(streakVariance / 2) : 
+                Math.floor(streakVariance / 3) // Deterministic streak calculation
       }
     })
 

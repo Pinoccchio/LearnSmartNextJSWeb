@@ -80,24 +80,49 @@ interface AITeachingRecommendation {
   confidenceScore: number
 }
 
-// Initialize Gemini AI
+// Initialize Gemini AI with better error handling
 const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+
+let genAI: GoogleGenerativeAI | null = null
+let model: any = null
 
 if (!apiKey) {
   console.error('❌ Gemini API key is not configured for teaching analytics')
+} else {
+  try {
+    genAI = new GoogleGenerativeAI(apiKey)
+    model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 4096,
+        responseMimeType: "text/plain",
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH", 
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE",
+        },
+      ],
+    })
+  } catch (error) {
+    console.error('❌ Failed to initialize Gemini AI:', error)
+  }
 }
-
-const genAI = new GoogleGenerativeAI(apiKey)
-
-const model = genAI.getGenerativeModel({ 
-  model: 'gemini-2.0-flash',
-  generationConfig: {
-    temperature: 0.7,
-    topK: 1,
-    topP: 1,
-    maxOutputTokens: 4096,
-  },
-})
 
 class TeachingAnalyticsAIService {
 
@@ -106,24 +131,48 @@ class TeachingAnalyticsAIService {
    */
   async generateTeachingInsights(courseData: CourseAnalyticsData): Promise<TeachingInsight[]> {
     try {
-      if (!apiKey) {
-        throw new Error('Gemini API key is not configured')
+      if (!apiKey || !model) {
+        console.log('⚠️ [TEACHING AI] AI service not available, using fallback insights')
+        return this.getFallbackTeachingInsights(courseData)
+      }
+
+      // Validate input data
+      if (!courseData || courseData.totalStudents === 0) {
+        console.log('⚠️ [TEACHING AI] Insufficient course data for AI analysis')
+        return this.getFallbackTeachingInsights(courseData)
       }
 
       console.log('🤖 [TEACHING AI] Generating teaching insights for course:', courseData.courseName)
       
       const prompt = this.buildTeachingInsightsPrompt(courseData)
       
-      const result = await model.generateContent(prompt)
+      // Add timeout and retry logic
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 30000))
+      ])
+      
       const response = await result.response
       const generatedText = response.text()
       
+      if (!generatedText || generatedText.trim().length === 0) {
+        throw new Error('Empty response from AI service')
+      }
+      
       console.log('✅ [TEACHING AI] Teaching insights generated successfully')
       
-      return this.parseTeachingInsights(generatedText)
+      const insights = this.parseTeachingInsights(generatedText)
+      
+      // Fallback if parsing failed
+      if (insights.length === 0) {
+        console.log('⚠️ [TEACHING AI] AI parsing failed, using fallback insights')
+        return this.getFallbackTeachingInsights(courseData)
+      }
+      
+      return insights
       
     } catch (error) {
-      console.error('❌ [TEACHING AI] Error generating teaching insights:', error)
+      console.error('❌ [TEACHING AI] Error generating teaching insights:', error?.message || error)
       return this.getFallbackTeachingInsights(courseData)
     }
   }
@@ -135,8 +184,9 @@ class TeachingAnalyticsAIService {
     studentsData: StudentPerformanceData[]
   ): Promise<AITeachingRecommendation[]> {
     try {
-      if (!apiKey) {
-        throw new Error('Gemini API key is not configured')
+      if (!apiKey || !model) {
+        console.log('⚠️ [TEACHING AI] AI service not available, using fallback interventions')
+        return this.getFallbackInterventions(studentsData)
       }
 
       const atRiskStudents = studentsData.filter(s => 
@@ -151,14 +201,31 @@ class TeachingAnalyticsAIService {
       
       const prompt = this.buildInterventionPrompt(atRiskStudents)
       
-      const result = await model.generateContent(prompt)
+      // Add timeout
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 25000))
+      ])
+      
       const response = await result.response
       const generatedText = response.text()
       
-      return this.parseInterventionRecommendations(generatedText)
+      if (!generatedText || generatedText.trim().length === 0) {
+        throw new Error('Empty response from AI service')
+      }
+      
+      const interventions = this.parseInterventionRecommendations(generatedText)
+      
+      // Fallback if parsing failed
+      if (interventions.length === 0) {
+        console.log('⚠️ [TEACHING AI] AI intervention parsing failed, using fallback')
+        return this.getFallbackInterventions(studentsData)
+      }
+      
+      return interventions
       
     } catch (error) {
-      console.error('❌ [TEACHING AI] Error generating interventions:', error)
+      console.error('❌ [TEACHING AI] Error generating interventions:', error?.message || error)
       return this.getFallbackInterventions(studentsData)
     }
   }
@@ -170,22 +237,46 @@ class TeachingAnalyticsAIService {
     courseData: CourseAnalyticsData
   ): Promise<{ insights: TeachingInsight[], recommendations: AITeachingRecommendation[] }> {
     try {
-      if (!apiKey) {
-        throw new Error('Gemini API key is not configured')
+      if (!apiKey || !model) {
+        console.log('⚠️ [TEACHING AI] AI service not available, using fallback technique analysis')
+        return {
+          insights: this.getFallbackTechniqueInsights(courseData),
+          recommendations: this.getFallbackTechniqueRecommendations(courseData)
+        }
       }
 
       console.log('📊 [TEACHING AI] Analyzing study technique effectiveness')
       
       const prompt = this.buildTechniqueAnalysisPrompt(courseData)
       
-      const result = await model.generateContent(prompt)
+      // Add timeout
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), 20000))
+      ])
+      
       const response = await result.response
       const generatedText = response.text()
       
-      return this.parseTechniqueAnalysis(generatedText)
+      if (!generatedText || generatedText.trim().length === 0) {
+        throw new Error('Empty response from AI service')
+      }
+      
+      const analysis = this.parseTechniqueAnalysis(generatedText)
+      
+      // Fallback if parsing failed
+      if (analysis.insights.length === 0 && analysis.recommendations.length === 0) {
+        console.log('⚠️ [TEACHING AI] AI technique analysis parsing failed, using fallback')
+        return {
+          insights: this.getFallbackTechniqueInsights(courseData),
+          recommendations: this.getFallbackTechniqueRecommendations(courseData)
+        }
+      }
+      
+      return analysis
       
     } catch (error) {
-      console.error('❌ [TEACHING AI] Error analyzing techniques:', error)
+      console.error('❌ [TEACHING AI] Error analyzing techniques:', error?.message || error)
       return {
         insights: this.getFallbackTechniqueInsights(courseData),
         recommendations: this.getFallbackTechniqueRecommendations(courseData)
@@ -762,23 +853,71 @@ Return ONLY the JSON response.
   }
 
   /**
-   * Test AI connection
+   * Test AI connection with retry logic
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(retries: number = 2): Promise<boolean> {
     try {
-      if (!apiKey) return false
+      if (!apiKey || !model) {
+        console.log('⚠️ [TEACHING AI] API key or model not available')
+        return false
+      }
+
+      console.log('🔧 [TEACHING AI] Testing AI connection...')
       
-      const result = await model.generateContent([
-        'Respond with "Teaching Analytics AI Connection Successful" if you can read this message.'
-      ])
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const result = await Promise.race([
+            model.generateContent('Respond with exactly "CONNECTION_SUCCESS" if you can read this message.'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 10000))
+          ])
+          
+          const responseText = result.response.text()?.trim() || ''
+          console.log('📡 [TEACHING AI] Connection test response:', responseText)
+          
+          if (responseText.includes('CONNECTION_SUCCESS') || responseText.toLowerCase().includes('success')) {
+            console.log('✅ [TEACHING AI] Connection test passed')
+            return true
+          }
+          
+          if (attempt < retries) {
+            console.log(`⚠️ [TEACHING AI] Connection test attempt ${attempt} failed, retrying...`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)) // Exponential backoff
+          }
+          
+        } catch (attemptError) {
+          console.log(`❌ [TEACHING AI] Connection test attempt ${attempt} error:`, attemptError?.message)
+          if (attempt === retries) {
+            throw attemptError
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        }
+      }
       
-      const responseText = result.response.text()?.toLowerCase() || ''
-      return responseText.includes('teaching analytics ai connection successful')
+      return false
       
     } catch (error) {
-      console.error('❌ [TEACHING AI] Connection test failed:', error)
+      console.error('❌ [TEACHING AI] Connection test failed:', error?.message || error)
       return false
     }
+  }
+
+  /**
+   * Get AI service status
+   */
+  getServiceStatus(): { available: boolean, configured: boolean, message: string } {
+    const configured = !!apiKey
+    const available = configured && !!model
+    
+    let message = ''
+    if (!configured) {
+      message = 'Gemini API key not configured'
+    } else if (!available) {
+      message = 'AI model initialization failed'
+    } else {
+      message = 'AI service ready'
+    }
+    
+    return { available, configured, message }
   }
 }
 

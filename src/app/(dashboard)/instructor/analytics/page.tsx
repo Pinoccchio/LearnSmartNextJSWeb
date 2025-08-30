@@ -543,7 +543,13 @@ function OverviewTab({ data, isLoading, aiInsights }: {
               <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium text-sm">{technique.technique}</h4>
-                  <Badge variant={technique.effectivenessPercentage >= 80 ? "default" : "secondary"}>
+                  <Badge 
+                    variant={
+                      technique.effectivenessPercentage >= 85 ? "success" : 
+                      technique.effectivenessPercentage >= 70 ? "info" :
+                      technique.effectivenessPercentage >= 60 ? "warning" : "destructive"
+                    }
+                  >
                     {technique.effectivenessPercentage}%
                   </Badge>
                 </div>
@@ -1108,8 +1114,18 @@ function AIInsightsTab({ data, isLoading }: {
     return (
       <div className="space-y-6">
         <Card>
-          <CardContent className="pt-6">
-            <Skeleton className="h-32 w-full" />
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              Loading AI Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1119,62 +1135,165 @@ function AIInsightsTab({ data, isLoading }: {
   if (!data) {
     return (
       <Card>
-        <CardContent className="pt-6">
-          <div className="text-center text-gray-500 dark:text-gray-400">
-            No AI insights available
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-yellow-500" />
+            AI Insights Unavailable
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center space-y-4">
+            <div className="text-gray-500 dark:text-gray-400">
+              AI insights are currently unavailable. This may be due to:
+            </div>
+            <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 text-left max-w-md mx-auto">
+              <li>• Insufficient student activity data</li>
+              <li>• AI service temporarily unavailable</li>
+              <li>• No courses or enrollments found</li>
+            </ul>
+            <div className="text-sm text-blue-600 dark:text-blue-400">
+              Encourage students to use study techniques to generate insights.
+            </div>
           </div>
         </CardContent>
       </Card>
     )
   }
 
+  // Show AI status message if available
+  const statusMessage = data.message || data.aiStatus
+  const hasInsights = (data.aiInsights && data.aiInsights.length > 0) || 
+                     (data.teachingRecommendations && data.teachingRecommendations.length > 0)
+  const hasRecommendations = (data.aiRecommendations && data.aiRecommendations.length > 0) ||
+                            (data.studentInterventions && data.studentInterventions.length > 0)
+
   return (
     <div className="space-y-6">
-      {/* Teaching Recommendations */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="h-5 w-5 text-yellow-500" />
-            Teaching Recommendations
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {data.teachingRecommendations.slice(0, 5).map((rec, index) => (
-              <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h4 className="font-medium">{rec.title}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge 
-                        variant={rec.priority === 1 ? 'destructive' : rec.priority === 2 ? 'default' : 'secondary'}
-                        className="text-xs"
-                      >
-                        Priority {rec.priority}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {rec.impact} impact
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {rec.confidence}% confidence
-                      </Badge>
+      {/* AI Status Banner */}
+      {statusMessage && (
+        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-blue-500" />
+              <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                AI Analysis Status: {statusMessage}
+              </span>
+            </div>
+            {data.studentsAnalyzed && (
+              <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                Analyzed {data.studentsAnalyzed} students across {data.coursesAnalyzed} courses
+                {data.atRiskStudents > 0 && ` • ${data.atRiskStudents} students need attention`}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* AI Insights (New Format) */}
+      {data.aiInsights && data.aiInsights.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-purple-500" />
+              AI-Generated Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {data.aiInsights.slice(0, 5).map((insight, index) => (
+                <div key={index} className={`p-4 rounded-lg border-l-4 ${
+                  insight.type === 'critical' ? 'bg-red-50 dark:bg-red-900/20 border-red-500' :
+                  insight.type === 'warning' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500' :
+                  insight.type === 'success' ? 'bg-green-50 dark:bg-green-900/20 border-green-500' :
+                  'bg-blue-50 dark:bg-blue-900/20 border-blue-500'
+                }`}>
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="font-medium">{insight.title}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge 
+                          variant={insight.priority <= 2 ? 'destructive' : insight.priority === 3 ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          Priority {insight.priority}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {Math.round(insight.confidence * 100)}% confidence
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {rec.affectedStudentsCount} students
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    {insight.description}
+                  </p>
+                  <div className="text-sm bg-blue-50 dark:bg-blue-900/20 p-3 rounded border-l-2 border-blue-500">
+                    <strong>Recommended Action:</strong> {insight.action}
+                  </div>
+                  {insight.supportingData && insight.supportingData.length > 0 && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      Supporting data: {insight.supportingData.join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Teaching Recommendations (Legacy Format) */}
+      {data.teachingRecommendations && data.teachingRecommendations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-yellow-500" />
+              Teaching Recommendations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {data.teachingRecommendations.slice(0, 5).map((rec, index) => (
+                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="font-medium">{rec.title}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge 
+                          variant={rec.priority === 1 ? 'destructive' : rec.priority === 2 ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          Priority {rec.priority}
+                        </Badge>
+                        {rec.impact && (
+                          <Badge variant="outline" className="text-xs">
+                            {rec.impact} impact
+                          </Badge>
+                        )}
+                        {rec.confidence && (
+                          <Badge variant="outline" className="text-xs">
+                            {rec.confidence}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {rec.affectedStudentsCount && (
+                      <div className="text-sm text-gray-500">
+                        {rec.affectedStudentsCount} students
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    {rec.description}
+                  </p>
+                  <div className="text-sm bg-blue-50 dark:bg-blue-900/20 p-3 rounded border-l-2 border-blue-500">
+                    <strong>Action:</strong> {rec.actionableAdvice || rec.action}
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  {rec.description}
-                </p>
-                <div className="text-sm bg-blue-50 dark:bg-blue-900/20 p-3 rounded border-l-2 border-blue-500">
-                  <strong>Action:</strong> {rec.actionableAdvice}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Student Interventions */}
       {data.studentInterventions.length > 0 && (
